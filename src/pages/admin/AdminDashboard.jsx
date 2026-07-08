@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, LogOut, RefreshCcw, Save, Trash2, X } from 'lucide-react'
+import { CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
 import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
@@ -30,6 +30,14 @@ export default function AdminDashboard({ league }) {
   const [busy, setBusy] = useState(false)
   const { signOut } = useAuth()
   const navigate = useNavigate()
+  const navItems = [
+    { id: 'dashboard', label: 'Inicio', icon: Home },
+    { id: 'partidos', label: 'Partidos', icon: CalendarDays },
+    { id: 'equipos', label: 'Equipos', icon: Users },
+    { id: 'jugadores', label: 'Jugadores', icon: UserRound },
+    { id: 'sanciones', label: 'Sanciones', icon: ShieldAlert },
+  ]
+  const activeNav = navItems.some((item) => item.id === tab) ? tab : sectionForTool(tab)
 
   async function run(action, done = 'Guardado correctamente') {
     if (!hasSupabaseConfig) {
@@ -48,30 +56,48 @@ export default function AdminDashboard({ league }) {
   }
 
   return (
-    <main className="min-h-screen bg-ink px-4 py-6 text-white">
-      <div className="mx-auto max-w-7xl">
-        <PageTitle kicker="Zona privada" title="Dashboard Admin">
-          <div className="flex gap-2">
-            <button className="button-secondary" onClick={league.reload}><RefreshCcw size={16} />Actualizar</button>
-            {hasSupabaseConfig && <button className="button-secondary" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} />Cerrar sesión</button>}
+    <main className="min-h-screen bg-[#050608] px-4 pb-24 pt-5 text-white lg:pb-8">
+      <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[240px_1fr]">
+        <aside className="screen-only sticky top-5 hidden h-[calc(100vh-2.5rem)] rounded-lg border border-gold/20 bg-black/70 p-4 shadow-gold lg:block">
+          <div className="mb-6">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">NOVA Admin</p>
+            <h1 className="mt-2 text-2xl font-black">Panel de Liga</h1>
           </div>
-        </PageTitle>
+          <nav className="space-y-2">
+            {navItems.map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => setTab(id)} className={`w-full justify-start ${activeNav === id ? 'button' : 'button-secondary'}`}>
+                <Icon size={18} />{label}
+              </button>
+            ))}
+          </nav>
+          <div className="absolute bottom-4 left-4 right-4 space-y-2">
+            <button className="button-secondary w-full justify-start" onClick={league.reload}><RefreshCcw size={16} />Actualizar</button>
+            {hasSupabaseConfig && <button className="button-secondary w-full justify-start" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} />Cerrar sesión</button>}
+          </div>
+        </aside>
 
-        <div className="mb-6 flex flex-wrap gap-2">
-          {['dashboard', 'liga', 'divisiones', 'equipos', 'jugadores', 'aprobaciones', 'partidos', 'acta digital', 'escáner nova id', 'estadísticas de jugadores', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
-            <button key={item} onClick={() => setTab(item)} className={tab === item ? 'button' : 'button-secondary'}>{item}</button>
-          ))}
-        </div>
+        <section className="min-w-0">
+          <PageTitle kicker="Zona privada" title={adminTitle(tab)}>
+            <div className="flex gap-2">
+              <button className="button-secondary lg:hidden" onClick={league.reload}><RefreshCcw size={16} /></button>
+              {hasSupabaseConfig && <button className="button-secondary lg:hidden" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} /></button>}
+            </div>
+          </PageTitle>
 
-        {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
+          {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
         {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} />}
+        {tab === 'partidos' && <PartidosHub league={league} setTab={setTab} />}
+        {tab === 'equipos' && <EquiposHub league={league} setTab={setTab} run={run} busy={busy} />}
+        {tab === 'jugadores' && <JugadoresHub league={league} setTab={setTab} run={run} busy={busy} />}
+        {tab === 'sanciones' && <SancionesHub league={league} setTab={setTab} run={run} busy={busy} />}
+
         {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
         {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
-        {tab === 'equipos' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
-        {tab === 'jugadores' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
+        {tab === 'equipos-form' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
+        {tab === 'jugadores-form' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'aprobaciones' && <PlayerApprovals busy={busy} run={run} teams={league.teams} players={league.players} />}
-        {tab === 'partidos' && <MatchForm busy={busy} run={run} league={league} />}
+        {tab === 'partidos-form' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'acta digital' && <MatchSheetAdmin busy={busy} run={run} league={league} />}
         {tab === 'escáner nova id' && <NovaIdScannerAdmin busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
@@ -79,52 +105,184 @@ export default function AdminDashboard({ league }) {
         {tab === 'nova champions cup' && <NovaChampionsAdmin busy={busy} run={run} league={league} />}
         {tab === 'eventos' && <EventForm busy={busy} run={run} league={league} />}
         {tab === 'tarjetas' && <CardForm busy={busy} run={run} league={league} />}
-        {tab === 'sanciones' && <SanctionForm busy={busy} run={run} league={league} />}
+        {tab === 'sanciones-form' && <SanctionForm busy={busy} run={run} league={league} />}
         {tab === 'noticias' && <NewsForm busy={busy} run={run} news={league.news} />}
         {tab === 'tabla' && <StandingsTable standings={league.standings} />}
+        </section>
       </div>
+      <nav className="screen-only fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-white/10 bg-black/95 px-2 pb-3 pt-2 backdrop-blur lg:hidden">
+        {navItems.map(({ id, label, icon: Icon }) => (
+          <button key={id} onClick={() => setTab(id)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-black ${activeNav === id ? 'bg-gold text-black' : 'text-slate-300'}`}>
+            <Icon size={19} />{label}
+          </button>
+        ))}
+      </nav>
     </main>
   )
 }
 
+function sectionForTool(tab) {
+  if (['partidos-form', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
+  if (['equipos-form', 'liga', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
+  if (['jugadores-form', 'aprobaciones'].includes(tab)) return 'jugadores'
+  if (['sanciones-form'].includes(tab)) return 'sanciones'
+  return 'dashboard'
+}
+
+function adminTitle(tab) {
+  const titles = {
+    dashboard: 'Inicio Admin',
+    partidos: 'Partidos',
+    equipos: 'Equipos',
+    jugadores: 'Jugadores',
+    sanciones: 'Sanciones',
+    'acta digital': 'Captura de Partido',
+    'escáner nova id': 'Escáner NOVA ID',
+    'nova champions cup': 'NOVA Champions Cup',
+    'partidos-form': 'Crear Partido',
+    'equipos-form': 'Gestionar Equipos',
+    'jugadores-form': 'Gestionar Jugadores',
+    'sanciones-form': 'Gestionar Sanciones',
+  }
+  return titles[tab] || tab
+}
+
 function AdminSummary({ league, setTab }) {
   const pending = league.players.filter((player) => player.approval_status === 'pending').length
-  const played = league.matches.filter((match) => match.status === 'played').length
-  const scheduled = league.matches.filter((match) => match.status !== 'played').length
+  const unpublished = league.matches.filter((match) => match.status === 'played').length
+  const sanctions = league.sanctions.filter((sanction) => sanction.status === 'active').length
   const today = new Date().toISOString().slice(0, 10)
   const todayMatches = league.matches.filter((match) => match.match_date?.slice(0, 10) === today)
+  const pendingToday = todayMatches.filter((match) => match.status !== 'played').length
 
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
-        <h2 className="text-3xl font-black">Hola Administrador</h2>
-        <p className="mt-1 text-gold">HOY</p>
-        <div className="mt-4 grid gap-3">
-          {todayMatches.length === 0 && <p className="text-sm text-slate-400">No hay partidos programados hoy.</p>}
-          {todayMatches.map((match) => (
-            <div key={match.id} className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-4 md:grid-cols-[100px_1fr_auto] md:items-center">
-              <p className="font-black text-gold">{new Date(match.match_date).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })}</p>
-              <div>
-                <p className="font-black">{league.teamsById.get(match.home_team_id)?.name} vs {league.teamsById.get(match.away_team_id)?.name}</p>
-                <p className="text-sm text-slate-400">{match.venue || 'Cancha por definir'}</p>
-              </div>
-              <button className="button" onClick={() => setTab('acta digital')}>INICIAR PARTIDO</button>
-            </div>
-          ))}
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Hoy</p>
+        <h2 className="mt-2 text-3xl font-black">Hola, Admin</h2>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <AdminMetric label="Partidos pendientes" value={pendingToday} />
+          <AdminMetric label="Resultados por publicar" value={unpublished} />
+          <AdminMetric label="Sanciones pendientes" value={sanctions} />
         </div>
       </section>
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminMetric label="Equipos" value={league.teams.length} />
-        <AdminMetric label="Jugadores pendientes" value={pending} />
-        <AdminMetric label="Partidos jugados" value={played} />
-        <AdminMetric label="Partidos por cerrar" value={scheduled} />
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />
+        <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos')} />
+        <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />
+        <AdminAction title="Ver sanciones" text="Disciplina activa" onClick={() => setTab('sanciones')} />
+      </section>
+
+      <section className="panel p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <ClipboardList className="text-gold" size={20} />
+          <h3 className="text-xl font-black">Partidos de hoy</h3>
+        </div>
+        <div className="grid gap-3">
+          {todayMatches.length === 0 && <p className="text-sm text-slate-400">No hay partidos programados hoy.</p>}
+          {todayMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={() => setTab('acta digital')} />)}
+        </div>
       </section>
     </div>
   )
 }
 
 function AdminMetric({ label, value }) {
-  return <div className="panel p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{label}</p><p className="mt-3 text-4xl font-black">{value}</p></div>
+  return <div className="rounded-lg border border-white/10 bg-white/[0.06] p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{label}</p><p className="mt-3 text-4xl font-black">{value}</p></div>
+}
+
+function AdminAction({ title, text, onClick }) {
+  return <button onClick={onClick} className="rounded-lg border border-gold/20 bg-white/[0.06] p-5 text-left shadow-glow transition hover:-translate-y-0.5 hover:border-gold/70"><p className="text-lg font-black">{title}</p><p className="mt-1 text-sm text-slate-400">{text}</p></button>
+}
+
+function AdminMatchCard({ match, league, onStart }) {
+  const home = league.teamsById.get(match.home_team_id)
+  const away = league.teamsById.get(match.away_team_id)
+  return (
+    <article className="grid gap-3 rounded-lg border border-white/10 bg-black/50 p-4 md:grid-cols-[90px_1fr_auto] md:items-center">
+      <p className="text-xl font-black text-gold">{match.match_date ? new Date(match.match_date).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }) : 'Sin hora'}</p>
+      <div>
+        <p className="text-lg font-black">{home?.name || 'Local'} vs {away?.name || 'Visitante'}</p>
+        <p className="text-sm text-slate-400">{match.venue || 'Cancha por definir'} · {statusBadge(match.status)}</p>
+      </div>
+      <button className="button min-h-12 w-full md:w-auto" onClick={onStart}>INICIAR</button>
+    </article>
+  )
+}
+
+function PartidosHub({ league, setTab }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const matches = league.matches.filter((match) => match.match_date?.slice(0, 10) === today)
+  const visibleMatches = matches.length ? matches : league.matches.slice(0, 8)
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminAction title="Acta digital" text="Capturar partido en vivo" onClick={() => setTab('acta digital')} />
+        <AdminAction title="Crear partido" text="Calendario y resultados" onClick={() => setTab('partidos-form')} />
+        <AdminAction title="Escáner NOVA ID" text="Validar jugadores" onClick={() => setTab('escáner nova id')} />
+        <AdminAction title="Playoffs y Champions" text="Torneos especiales" onClick={() => setTab('playoffs')} />
+      </div>
+      <section className="panel p-5">
+        <h2 className="text-xl font-black">¿Qué partido vas a capturar?</h2>
+        <p className="mt-1 text-sm text-slate-400">Elige una tarjeta y abre el acta digital para empezar rápido.</p>
+        <div className="mt-4 grid gap-3">
+          {visibleMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={() => setTab('acta digital')} />)}
+          {visibleMatches.length === 0 && <p className="text-sm text-slate-400">Crea un partido para iniciar la captura.</p>}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function EquiposHub({ league, setTab, run, busy }) {
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminAction title="Equipos" text="Crear o editar" onClick={() => setTab('equipos-form')} />
+        <AdminAction title="Divisiones" text="Orden y ascensos" onClick={() => setTab('divisiones')} />
+        <AdminAction title="Liga" text="Logo y portada" onClick={() => setTab('liga')} />
+        <AdminAction title="Tabla" text="Ver clasificación" onClick={() => setTab('tabla')} />
+      </div>
+      <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />
+    </section>
+  )
+}
+
+function JugadoresHub({ league, setTab, run, busy }) {
+  const pending = league.players.filter((player) => player.approval_status === 'pending').length
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminAction title="Registrar jugador" text="Alta manual" onClick={() => setTab('jugadores-form')} />
+        <AdminAction title="Aprobaciones" text={`${pending} pendientes`} onClick={() => setTab('aprobaciones')} />
+        <AdminAction title="Estadísticas" text="Goles y asistencias" onClick={() => setTab('estadísticas de jugadores')} />
+        <AdminAction title="NOVA ID" text="Escanear credencial" onClick={() => setTab('escáner nova id')} />
+      </div>
+      <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />
+    </section>
+  )
+}
+
+function SancionesHub({ league, setTab, run, busy }) {
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminAction title="Sanción rápida" text="Registrar castigo" onClick={() => setTab('sanciones-form')} />
+        <AdminAction title="Tarjetas" text="Amarillas y rojas" onClick={() => setTab('tarjetas')} />
+        <AdminAction title="Eventos" text="Incidencias" onClick={() => setTab('eventos')} />
+        <AdminAction title="Noticias" text="Publicar aviso" onClick={() => setTab('noticias')} />
+      </div>
+      <SanctionForm busy={busy} run={run} league={league} />
+    </section>
+  )
+}
+
+function statusBadge(status) {
+  if (status === 'played') return '🟢 Publicado'
+  if (status === 'in_progress') return '🔵 En curso'
+  if (status === 'problem') return '🔴 Problema'
+  return '🟡 Pendiente'
 }
 
 function LeagueSettingsForm({ run, busy, settings }) {

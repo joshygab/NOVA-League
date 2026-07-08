@@ -172,6 +172,7 @@ create table public.match_reports (
   match_id uuid not null references public.matches(id) on delete cascade,
   referee_name text,
   observations text,
+  report_data jsonb,
   home_captain_signature text,
   away_captain_signature text,
   referee_signature text,

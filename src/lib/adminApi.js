@@ -434,6 +434,7 @@ export async function saveMatchReport(form) {
     match_id: form.match_id,
     referee_name: form.referee_name || null,
     observations: form.observations || null,
+    report_data: form.report_data || null,
     home_captain_signature: form.home_captain_signature || null,
     away_captain_signature: form.away_captain_signature || null,
     referee_signature: form.referee_signature || null,
@@ -502,6 +503,34 @@ export async function saveDigitalMatchEvent(form) {
   }
 
   return eventResult
+}
+
+export async function deleteDigitalMatchEvent(event) {
+  const type = event.event_type || event.type
+  if (type === 'goal') {
+    const goalDelete = await supabase
+      .from('goals')
+      .delete()
+      .eq('match_id', event.match_id)
+      .eq('team_id', event.team_id)
+      .eq('player_id', event.player_id)
+      .eq('minute', Number(event.minute || 0))
+    if (goalDelete.error) return goalDelete
+  }
+
+  if (type === 'yellow_card' || type === 'red_card') {
+    const cardDelete = await supabase
+      .from('match_cards')
+      .delete()
+      .eq('match_id', event.match_id)
+      .eq('team_id', event.team_id)
+      .eq('player_id', event.player_id)
+      .eq('minute', Number(event.minute || 0))
+      .eq('type', type === 'yellow_card' ? 'yellow' : 'red')
+    if (cardDelete.error) return cardDelete
+  }
+
+  return supabase.from('match_events').delete().eq('id', event.id)
 }
 
 export async function finalizeDigitalMatch({ match, report, score }) {

@@ -35,6 +35,8 @@ create table if not exists public.match_reports (
   unique (match_id)
 );
 
+alter table public.match_reports add column if not exists report_data jsonb;
+
 alter table public.match_lineups enable row level security;
 alter table public.match_reports enable row level security;
 
