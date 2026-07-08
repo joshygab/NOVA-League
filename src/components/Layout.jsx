@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BarChart3, CalendarDays, Crown, Goal, History, Home, LogIn, LogOut, Menu, Shield, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Crown, Goal, History, Home, IdCard, LogIn, LogOut, Menu, Shield, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 
 const nav = [
@@ -57,6 +57,7 @@ export default function Layout({ league }) {
           {user ? (
             <div className="hidden items-center gap-2 lg:flex">
               <NavLink to="/perfil" className="button-secondary"><UserRound size={16} />Mi Perfil</NavLink>
+              <NavLink to="/nova-id" className="button-secondary"><IdCard size={16} />NOVA ID</NavLink>
               <button className="button" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>
             </div>
           ) : (
@@ -81,6 +82,7 @@ export default function Layout({ league }) {
               {user ? (
                 <>
                   <NavItem to="/perfil" label="Mi Perfil" icon={UserRound} onClick={() => setMenuOpen(false)} />
+                  <NavItem to="/nova-id" label="NOVA ID" icon={IdCard} onClick={() => setMenuOpen(false)} />
                   <button className="button-secondary justify-start" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>
                 </>
               ) : (

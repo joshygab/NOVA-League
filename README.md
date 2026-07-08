@@ -14,6 +14,7 @@ Ambas apps leen la misma fuente de datos. En local funciona con datos demo; en p
 - Perfil privado `/perfil` con equipo, escudo, datos del jugador y estadísticas calculadas automáticamente.
 - NOVA Champions Cup `/nova-champions`: apartado premium separado de liga regular, con modo próximamente, activación admin, clasificados y bracket propio.
 - Acta Digital de Partido en admin: flujo móvil para preparar partido, registrar acciones, firmar, finalizar y generar NOVA-F05 imprimible/PDF.
+- NOVA ID: credencial digital premium con QR, perfil público y escáner admin para validar asistencia.
 - Los registros quedan pendientes hasta que un administrador los aprueba.
 - Zona privada `/admin`: login de administrador y dashboard separado para administrar la liga.
 - Aprobación/rechazo de jugadores y asignación a equipos.
@@ -73,6 +74,7 @@ Para una base ya creada, puedes aplicar solo los incrementales necesarios desde 
 - `supabase/add_nova_champions_cup.sql`
 - `supabase/add_playoff_settings.sql`
 - `supabase/add_match_digital_report.sql`
+- `supabase/add_nova_id.sql`
 
 ## Rutas principales
 

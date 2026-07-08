@@ -21,6 +21,8 @@ import NovaChampionsPage from './pages/NovaChampionsPage'
 import PlayerRegisterPage from './pages/PlayerRegisterPage'
 import PlayerLoginPage from './pages/PlayerLoginPage'
 import MyPlayerProfilePage from './pages/MyPlayerProfilePage'
+import NovaIdPage from './pages/NovaIdPage'
+import NovaIdPublicProfilePage from './pages/NovaIdPublicProfilePage'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import { useAuth } from './lib/AuthContext'
@@ -67,6 +69,8 @@ export default function App() {
         <Route path="/registro" element={<PlayerRegisterPage league={league} />} />
         <Route path="/login" element={<PlayerLoginPage />} />
         <Route path="/perfil" element={<MyPlayerProfilePage league={league} />} />
+        <Route path="/nova-id" element={<NovaIdPage league={league} />} />
+        <Route path="/nova-id/:novaId" element={<NovaIdPublicProfilePage league={publicLeague} />} />
         <Route path="/mi-perfil" element={<Navigate to="/perfil" replace />} />
       </Route>
       <Route path="/admin/login" element={<AdminLogin />} />

@@ -9,6 +9,7 @@ import PlayoffBracket from '../../components/PlayoffBracket'
 import StandingsTable from '../../components/StandingsTable'
 import { goalTypes, playoffStageLabel } from '../../lib/labels'
 import MatchSheetAdmin from './MatchSheetAdmin'
+import NovaIdScannerAdmin from './NovaIdScannerAdmin'
 
 const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
 const emptyDivision = { name: '', slug: '', description: '', active: true, level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
@@ -57,7 +58,7 @@ export default function AdminDashboard({ league }) {
         </PageTitle>
 
         <div className="mb-6 flex flex-wrap gap-2">
-          {['dashboard', 'liga', 'divisiones', 'equipos', 'jugadores', 'aprobaciones', 'partidos', 'acta digital', 'estadísticas de jugadores', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
+          {['dashboard', 'liga', 'divisiones', 'equipos', 'jugadores', 'aprobaciones', 'partidos', 'acta digital', 'escáner nova id', 'estadísticas de jugadores', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
             <button key={item} onClick={() => setTab(item)} className={tab === item ? 'button' : 'button-secondary'}>{item}</button>
           ))}
         </div>
@@ -72,6 +73,7 @@ export default function AdminDashboard({ league }) {
         {tab === 'aprobaciones' && <PlayerApprovals busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'acta digital' && <MatchSheetAdmin busy={busy} run={run} league={league} />}
+        {tab === 'escáner nova id' && <NovaIdScannerAdmin busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
         {tab === 'playoffs' && <PlayoffsAdmin busy={busy} run={run} league={league} />}
         {tab === 'nova champions cup' && <NovaChampionsAdmin busy={busy} run={run} league={league} />}

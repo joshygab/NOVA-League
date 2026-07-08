@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { uploadPublicFile } from './data'
+import { formatNovaId } from './novaId'
 
 export async function saveTeam(form) {
   const payload = {
@@ -120,6 +121,8 @@ export async function savePlayer(form) {
   if (!form.team_id) return { error: { message: 'Selecciona un equipo para el jugador.' } }
   const payload = {
     team_id: form.team_id,
+    nova_id: form.nova_id || formatNovaId(Date.now()),
+    status: form.status || 'active',
     name: form.name,
     email: form.email || null,
     phone: form.phone || null,
@@ -516,4 +519,28 @@ export async function finalizeDigitalMatch({ match, report, score }) {
     match_id: match.id,
     status: 'finalized',
   })
+}
+
+export async function confirmNovaIdAttendance({ match, player }) {
+  if (!match || !player) return { error: { message: 'Selecciona partido y jugador.' } }
+  if (![match.home_team_id, match.away_team_id].includes(player.team_id)) {
+    return { error: { message: 'Jugador registrado en otro equipo.' } }
+  }
+
+  const roster = await supabase.from('match_roster').upsert({
+    match_id: match.id,
+    player_id: player.id,
+    confirmed: true,
+    confirmed_at: new Date().toISOString(),
+  }, { onConflict: 'match_id,player_id' })
+  if (roster.error) return roster
+
+  return supabase.from('match_lineups').upsert({
+    match_id: match.id,
+    team_id: player.team_id,
+    player_id: player.id,
+    is_starter: true,
+    is_present: true,
+    captain: false,
+  }, { onConflict: 'match_id,player_id' })
 }

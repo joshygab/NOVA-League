@@ -1,5 +1,6 @@
 import { hasSupabaseConfig, supabase } from './supabase'
 import { uploadPublicFile } from './data'
+import { formatNovaId } from './novaId'
 
 export const roles = {
   player: 'player',
@@ -60,6 +61,7 @@ export async function registerPlayer(form) {
 
   return supabase.from('players').insert({
     auth_user_id: userId,
+    nova_id: formatNovaId(Date.now()),
     division_id: form.division_id || null,
     team_id: form.team_id,
     name: form.name,
