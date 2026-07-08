@@ -45,7 +45,7 @@ export default function Home({ league }) {
                   <h2 className="text-xl font-black">{division.name}</h2>
                   <Link to={`/tabla?division=${division.slug || division.id}`} className="button-secondary min-h-9 px-3 py-1 text-xs">Ver completa</Link>
                 </div>
-                <StandingsTable standings={division.standings.slice(0, 5)} compact />
+                <StandingsTable standings={division.standings.slice(0, 5)} compact championsTeamIds={league.novaChampionsTeamIds} />
               </section>
             ))}
           </div>

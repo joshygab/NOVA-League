@@ -337,3 +337,67 @@ export async function saveNews(form) {
   }
   return supabase.from('news').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
 }
+
+export async function saveNovaChampionsSettings(form) {
+  return supabase.from('nova_champions_settings').upsert({
+    id: 1,
+    is_active: form.is_active,
+    status: form.is_active ? 'active' : 'coming_soon',
+    season_id: form.season_id || new Date().getFullYear().toString(),
+    format: Number(form.format || 8),
+  }).select().single()
+}
+
+export async function setNovaChampionsTeam(teamId, selected, seasonId = new Date().getFullYear().toString()) {
+  if (selected) {
+    return supabase.from('nova_champions_qualified_teams').upsert({
+      team_id: teamId,
+      season_id: seasonId,
+      qualification_method: 'manual',
+    }, { onConflict: 'team_id,season_id' })
+  }
+  return supabase.from('nova_champions_qualified_teams').delete().eq('team_id', teamId).eq('season_id', seasonId)
+}
+
+export async function saveNovaChampionsMatch(form) {
+  const home = form.home_score === '' || form.home_score == null ? null : Number(form.home_score)
+  const away = form.away_score === '' || form.away_score == null ? null : Number(form.away_score)
+  const homePen = form.home_penalties === '' || form.home_penalties == null ? null : Number(form.home_penalties)
+  const awayPen = form.away_penalties === '' || form.away_penalties == null ? null : Number(form.away_penalties)
+  const winner = home == null || away == null
+    ? null
+    : home > away ? form.home_team_id
+      : away > home ? form.away_team_id
+        : homePen != null && awayPen != null && homePen !== awayPen ? (homePen > awayPen ? form.home_team_id : form.away_team_id)
+          : form.winner_team_id || null
+
+  return supabase.from('nova_champions_matches').upsert({
+    id: form.id || undefined,
+    season_id: form.season_id || new Date().getFullYear().toString(),
+    round: form.round,
+    match_order: Number(form.match_order || 1),
+    home_team_id: form.home_team_id || null,
+    away_team_id: form.away_team_id || null,
+    home_score: home,
+    away_score: away,
+    home_penalties: homePen,
+    away_penalties: awayPen,
+    winner_team_id: winner,
+    status: form.status || 'scheduled',
+    match_date: form.match_date || null,
+    venue: form.venue || null,
+    mvp_player_id: form.mvp_player_id || null,
+    best_goalkeeper_player_id: form.best_goalkeeper_player_id || null,
+  }).select().single()
+}
+
+export async function saveNovaChampionsStat(form) {
+  return supabase.from('nova_champions_stats').insert({
+    match_id: form.match_id,
+    player_id: form.player_id,
+    team_id: form.team_id,
+    stat_type: form.stat_type,
+    minute: form.minute ? Number(form.minute) : null,
+    value: Number(form.value || 1),
+  })
+}

@@ -85,3 +85,16 @@ export const mockNews = [
 export const mockGallery = [
   { id: '1', title: 'Final de jornada', image_url: '', created_at: '2026-07-13T12:00:00' },
 ]
+
+export const mockNovaChampionsSettings = {
+  id: 1,
+  is_active: false,
+  status: 'coming_soon',
+  season_id: '2026',
+  format: 8,
+}
+
+export const mockNovaChampionsQualifiedTeams = []
+export const mockNovaChampionsMatches = []
+export const mockNovaChampionsStats = []
+export const mockNovaChampionsHistory = []

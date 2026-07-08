@@ -1,7 +1,7 @@
 import Crest from './Crest'
 import Badge from './Badge'
 
-export default function StandingsTable({ standings, compact = false }) {
+export default function StandingsTable({ standings, compact = false, championsTeamIds = new Set() }) {
   return (
     <div className="panel overflow-hidden">
       <div className="overflow-x-auto">
@@ -24,6 +24,7 @@ export default function StandingsTable({ standings, compact = false }) {
           <tbody className="divide-y divide-white/10">
             {standings.map((team, index) => {
               const semifinalist = index < 4
+              const novaChampions = championsTeamIds.has(team.id)
               return (
               <tr key={team.id} className={`transition hover:bg-white/[0.055] ${semifinalist ? 'bg-gold/[0.075] shadow-gold' : ''}`}>
                 <td className={`px-4 py-4 font-black ${semifinalist ? 'text-gold' : 'text-slate-400'}`}>{semifinalist ? '🏆 ' : ''}{index + 1}</td>
@@ -33,6 +34,7 @@ export default function StandingsTable({ standings, compact = false }) {
                     <div>
                       <p className="font-bold text-white">{team.name}</p>
                       <p className="text-xs text-slate-500">{team.city}</p>
+                      {compact && novaChampions && <p className="mt-1 text-xs font-black text-gold">NOVA Champions Cup</p>}
                     </div>
                   </div>
                 </td>
@@ -44,7 +46,7 @@ export default function StandingsTable({ standings, compact = false }) {
                 <Cell>{team.goalsAgainst}</Cell>
                 <Cell>{team.goalDifference}</Cell>
                 <Cell strong>{team.points}</Cell>
-                {!compact && <td className="px-4 py-4">{semifinalist && <Badge tone="gold">SEMIFINALES</Badge>}</td>}
+                {!compact && <td className="px-4 py-4"><div className="flex flex-wrap gap-2">{semifinalist && <Badge tone="gold">SEMIFINALES</Badge>}{novaChampions && <Badge tone="gold">NOVA Champions Cup</Badge>}</div></td>}
               </tr>
             )})}
           </tbody>

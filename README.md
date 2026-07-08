@@ -12,6 +12,7 @@ Ambas apps leen la misma fuente de datos. En local funciona con datos demo; en p
 - Zona pública: inicio, divisiones, tabla, calendario, partidos, equipos, jugadores, goleadores, estadísticas, historial, registro y login de jugadores.
 - Registro de jugadores con correo, contraseña, equipo existente, posición, número, edad y foto opcional.
 - Perfil privado `/perfil` con equipo, escudo, datos del jugador y estadísticas calculadas automáticamente.
+- NOVA Champions Cup `/nova-champions`: apartado premium separado de liga regular, con modo próximamente, activación admin, clasificados y bracket propio.
 - Los registros quedan pendientes hasta que un administrador los aprueba.
 - Zona privada `/admin`: login de administrador y dashboard separado para administrar la liga.
 - Aprobación/rechazo de jugadores y asignación a equipos.
@@ -68,6 +69,7 @@ Para una base ya creada, puedes aplicar solo los incrementales necesarios desde 
 - `supabase/add_divisions.sql`
 - `supabase/add_player_auth.sql`
 - `supabase/add_division_isolation.sql`
+- `supabase/add_nova_champions_cup.sql`
 
 ## Rutas principales
 

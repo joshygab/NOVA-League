@@ -1,7 +1,7 @@
 import { supabase, hasSupabaseConfig } from './supabase'
-import { mockCards, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockPlayers, mockPlayoffMatches, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
+import { mockCards, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockNovaChampionsHistory, mockNovaChampionsMatches, mockNovaChampionsQualifiedTeams, mockNovaChampionsSettings, mockNovaChampionsStats, mockPlayers, mockPlayoffMatches, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
 
-const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery', 'user_profiles']
+const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery', 'user_profiles', 'nova_champions_settings', 'nova_champions_qualified_teams', 'nova_champions_matches', 'nova_champions_stats', 'nova_champions_champions_history']
 
 export async function fetchLeagueData() {
   if (!hasSupabaseConfig) {
@@ -18,11 +18,18 @@ export async function fetchLeagueData() {
       playoffMatches: mockPlayoffMatches,
       news: mockNews,
       gallery: mockGallery,
+      novaChampions: {
+        settings: mockNovaChampionsSettings,
+        qualifiedTeams: mockNovaChampionsQualifiedTeams,
+        matches: mockNovaChampionsMatches,
+        stats: mockNovaChampionsStats,
+        history: mockNovaChampionsHistory,
+      },
       settings: mockLeagueSettings,
     }
   }
 
-  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery] = await Promise.all([
+  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory] = await Promise.all([
     supabase.from('league_settings').select('*').eq('id', 1).maybeSingle(),
     supabase.from('divisions').select('*').order('level'),
     supabase.from('season_history').select('*').order('created_at', { ascending: false }),
@@ -36,9 +43,14 @@ export async function fetchLeagueData() {
     supabase.from('playoff_matches').select('*').order('slot'),
     supabase.from('news').select('*').order('published_at', { ascending: false }),
     supabase.from('gallery').select('*').order('created_at', { ascending: false }),
+    supabase.from('nova_champions_settings').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('nova_champions_qualified_teams').select('*').order('created_at'),
+    supabase.from('nova_champions_matches').select('*').order('round').order('match_order'),
+    supabase.from('nova_champions_stats').select('*').order('minute'),
+    supabase.from('nova_champions_champions_history').select('*').order('created_at', { ascending: false }),
   ])
 
-  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery].find((result) => result.error)?.error
+  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory].find((result) => result.error)?.error
   if (error) throw error
 
   return {
@@ -54,6 +66,13 @@ export async function fetchLeagueData() {
     playoffMatches: playoffMatches.data ?? [],
     news: news.data ?? [],
     gallery: gallery.data ?? [],
+    novaChampions: {
+      settings: championsSettings.data ?? mockNovaChampionsSettings,
+      qualifiedTeams: championsQualifiedTeams.data ?? [],
+      matches: championsMatches.data ?? [],
+      stats: championsStats.data ?? [],
+      history: championsHistory.data ?? [],
+    },
     settings: settings.data ?? mockLeagueSettings,
   }
 }

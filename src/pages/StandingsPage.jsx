@@ -9,7 +9,7 @@ export default function StandingsPage({ league }) {
     <>
       <PageTitle kicker="Clasificación" title={selectedDivision ? `Tabla ${selectedDivision.name}` : 'Tabla'} />
       <DivisionTabs divisions={divisions} activeDivision={selectedDivision} onChange={setDivision} />
-      <StandingsTable standings={filteredLeague.standings} />
+      <StandingsTable standings={filteredLeague.standings} championsTeamIds={league.novaChampionsTeamIds} />
     </>
   )
 }

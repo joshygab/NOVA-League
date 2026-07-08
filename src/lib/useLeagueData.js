@@ -3,7 +3,7 @@ import { fetchLeagueData, subscribeToLeagueChanges } from './data'
 import { buildMvpRanking, buildPlayerStats, calculateDivisionStandings, calculateStandings } from './standings'
 
 export function useLeagueData() {
-  const [data, setData] = useState({ divisions: [], seasonHistory: [], teams: [], players: [], matches: [], goals: [], events: [], cards: [], sanctions: [], playoffMatches: [], news: [], gallery: [], settings: null })
+  const [data, setData] = useState({ divisions: [], seasonHistory: [], teams: [], players: [], matches: [], goals: [], events: [], cards: [], sanctions: [], playoffMatches: [], news: [], gallery: [], novaChampions: { settings: null, qualifiedTeams: [], matches: [], stats: [], history: [] }, settings: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -38,6 +38,7 @@ export function useLeagueData() {
   )
   const playerStatsById = useMemo(() => new Map(playerStats.map((player) => [player.id, player])), [playerStats])
   const mvpRanking = useMemo(() => buildMvpRanking(data.players, data.matches), [data.players, data.matches])
+  const novaChampionsTeamIds = useMemo(() => new Set((data.novaChampions?.qualifiedTeams || []).map((row) => row.team_id)), [data.novaChampions?.qualifiedTeams])
 
-  return { ...data, allPlayers, publicPlayers, publicPlayersById, loading, error, standings, divisionTables, playerStats, playerStatsById, mvpRanking, teamsById, divisionsById, playersById, reload: load }
+  return { ...data, allPlayers, publicPlayers, publicPlayersById, loading, error, standings, divisionTables, playerStats, playerStatsById, mvpRanking, teamsById, divisionsById, playersById, novaChampionsTeamIds, reload: load }
 }

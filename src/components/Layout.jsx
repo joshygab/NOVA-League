@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BarChart3, CalendarDays, Goal, History, Home, LogIn, LogOut, Menu, Shield, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Crown, Goal, History, Home, LogIn, LogOut, Menu, Shield, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 
 const nav = [
@@ -10,6 +10,7 @@ const nav = [
   { to: '/calendario', label: 'Calendario', icon: CalendarDays },
   { to: '/partidos', label: 'Partidos', icon: Swords },
   { to: '/playoffs', label: 'Playoffs', icon: Swords },
+  { to: '/nova-champions', label: 'NOVA Champions', icon: Crown },
   { to: '/goleadores', label: 'Goleadores', icon: Goal },
   { to: '/equipos', label: 'Equipos', icon: Shield },
   { to: '/jugadores', label: 'Jugadores', icon: Users },

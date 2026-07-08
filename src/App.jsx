@@ -17,6 +17,7 @@ import StatsPage from './pages/StatsPage'
 import ScorersPage from './pages/ScorersPage'
 import PlayoffsPage from './pages/PlayoffsPage'
 import NewsPage from './pages/NewsPage'
+import NovaChampionsPage from './pages/NovaChampionsPage'
 import PlayerRegisterPage from './pages/PlayerRegisterPage'
 import PlayerLoginPage from './pages/PlayerLoginPage'
 import MyPlayerProfilePage from './pages/MyPlayerProfilePage'
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/partidos" element={<MatchesPage league={publicLeague} />} />
         <Route path="/partidos/:id" element={<MatchDetailPage league={publicLeague} />} />
         <Route path="/playoffs" element={<PlayoffsPage league={publicLeague} />} />
+        <Route path="/nova-champions" element={<NovaChampionsPage league={publicLeague} />} />
         <Route path="/equipos" element={<TeamsPage league={publicLeague} />} />
         <Route path="/equipos/:id" element={<TeamProfilePage league={publicLeague} />} />
         <Route path="/jugadores" element={<PlayersPage league={publicLeague} />} />
