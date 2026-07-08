@@ -206,6 +206,21 @@ create table public.playoff_matches (
   unique (division_id, stage, slot)
 );
 
+create table public.playoff_settings (
+  id uuid primary key default gen_random_uuid(),
+  division_id uuid not null references public.divisions(id) on delete cascade,
+  is_active boolean not null default false,
+  status text not null default 'coming_soon' check (status in ('coming_soon', 'active', 'finished')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (division_id)
+);
+
+insert into public.playoff_settings (division_id, is_active, status)
+select id, false, 'coming_soon'
+from public.divisions
+on conflict (division_id) do nothing;
+
 create table public.news (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -302,6 +317,7 @@ alter table public.goals enable row level security;
 alter table public.match_cards enable row level security;
 alter table public.sanctions enable row level security;
 alter table public.playoff_matches enable row level security;
+alter table public.playoff_settings enable row level security;
 alter table public.news enable row level security;
 alter table public.gallery enable row level security;
 alter table public.nova_champions_settings enable row level security;
@@ -325,6 +341,7 @@ create policy "public read goals" on public.goals for select using (true);
 create policy "public read match cards" on public.match_cards for select using (true);
 create policy "public read sanctions" on public.sanctions for select using (true);
 create policy "public read playoff matches" on public.playoff_matches for select using (true);
+create policy "public read playoff settings" on public.playoff_settings for select using (true);
 create policy "public read news" on public.news for select using (true);
 create policy "public read gallery" on public.gallery for select using (true);
 create policy "public read nova champions settings" on public.nova_champions_settings for select using (true);
@@ -345,6 +362,7 @@ create policy "admin write goals" on public.goals for all using (public.is_admin
 create policy "admin write match cards" on public.match_cards for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write sanctions" on public.sanctions for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write playoff matches" on public.playoff_matches for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write playoff settings" on public.playoff_settings for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write news" on public.news for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write gallery" on public.gallery for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write nova champions settings" on public.nova_champions_settings for all using (public.is_admin()) with check (public.is_admin());
@@ -387,6 +405,7 @@ alter publication supabase_realtime add table public.goals;
 alter publication supabase_realtime add table public.match_cards;
 alter publication supabase_realtime add table public.sanctions;
 alter publication supabase_realtime add table public.playoff_matches;
+alter publication supabase_realtime add table public.playoff_settings;
 alter publication supabase_realtime add table public.news;
 alter publication supabase_realtime add table public.gallery;
 alter publication supabase_realtime add table public.nova_champions_settings;

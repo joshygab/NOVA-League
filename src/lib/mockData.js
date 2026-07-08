@@ -72,6 +72,12 @@ export const mockPlayoffMatches = [
   { id: 'p1', division_id: 'd1', stage: 'semifinal', slot: 1, home_team_id: '1', away_team_id: '2', home_score: null, away_score: null, home_penalties: null, away_penalties: null, winner_team_id: null, status: 'pending', match_date: null, venue: 'Cancha Central', mvp_player_id: null },
 ]
 
+export const mockPlayoffSettings = [
+  { id: 'ps1', division_id: 'd1', is_active: false, status: 'coming_soon' },
+  { id: 'ps2', division_id: 'd2', is_active: false, status: 'coming_soon' },
+  { id: 'ps3', division_id: 'd3', is_active: false, status: 'coming_soon' },
+]
+
 export const mockNews = [
   {
     id: '1',

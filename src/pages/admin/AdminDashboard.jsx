@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, LogOut, RefreshCcw, Save, Trash2, X } from 'lucide-react'
-import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import PageTitle from '../../components/PageTitle'
@@ -337,6 +337,8 @@ function PlayoffsAdmin({ run, busy, league }) {
   const [divisionId, setDivisionId] = useState(league.divisions[0]?.id || '')
   const [thirdPlace, setThirdPlace] = useState(false)
   const activeDivision = league.divisionTables.find((division) => division.id === divisionId)
+  const setting = league.playoffSettings?.find((item) => item.division_id === divisionId)
+  const active = setting?.is_active || setting?.status === 'active'
   const playoffMatches = league.playoffMatches.filter((match) => (match.division_id || league.teamsById.get(match.home_team_id)?.division_id) === divisionId)
   const selectedPlayers = form ? league.players.filter((player) => [form.home_team_id, form.away_team_id].includes(player.team_id)) : []
 
@@ -346,12 +348,13 @@ function PlayoffsAdmin({ run, busy, league }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-black">Playoffs</h2>
-            <p className="mt-1 text-sm text-slate-400">Genera semifinales con los primeros 4 puestos de la división seleccionada.</p>
+            <p className="mt-1 text-sm text-slate-400">Activa playoffs cuando estén listos y genera semifinales por división.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select className="input max-w-xs" value={divisionId} onChange={(event) => { setDivisionId(event.target.value); setForm(null) }}>
               {league.divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}
             </select>
+            <button className="button-secondary" disabled={busy} onClick={() => run(() => savePlayoffSetting({ division_id: divisionId, is_active: !active }), active ? 'Playoffs desactivados' : 'Playoffs activados')}>{active ? 'Desactivar' : 'Activar'} playoffs</button>
             <button className="button" disabled={busy} onClick={() => run(() => generateSemifinals(activeDivision?.standings || [], divisionId), 'Semifinales generadas')}>Generar semifinales</button>
           </div>
         </div>

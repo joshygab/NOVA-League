@@ -401,3 +401,12 @@ export async function saveNovaChampionsStat(form) {
     value: Number(form.value || 1),
   })
 }
+
+export async function savePlayoffSetting({ division_id, is_active }) {
+  if (!division_id) return { error: { message: 'Selecciona una división.' } }
+  return supabase.from('playoff_settings').upsert({
+    division_id,
+    is_active,
+    status: is_active ? 'active' : 'coming_soon',
+  }, { onConflict: 'division_id' }).select().single()
+}

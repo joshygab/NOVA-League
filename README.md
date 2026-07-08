@@ -70,6 +70,7 @@ Para una base ya creada, puedes aplicar solo los incrementales necesarios desde 
 - `supabase/add_player_auth.sql`
 - `supabase/add_division_isolation.sql`
 - `supabase/add_nova_champions_cup.sql`
+- `supabase/add_playoff_settings.sql`
 
 ## Rutas principales
 
