@@ -10,14 +10,14 @@ import StandingsTable from '../../components/StandingsTable'
 import { goalTypes, playoffStageLabel } from '../../lib/labels'
 
 const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
-const emptyDivision = { name: '', level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
+const emptyDivision = { name: '', slug: '', description: '', active: true, level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
 const emptyLeagueSettings = { name: '', short_name: '', tagline: '', description: '', logo_url: '', logoFile: null }
 const emptyPlayer = { team_id: '', name: '', email: '', phone: '', birth_date: '', requested_team_name: '', position: '', number: '', age: '', approval_status: 'approved', photo_url: '', photoFile: null }
-const emptyMatch = { round: 1, match_date: '', venue: '', home_team_id: '', away_team_id: '', home_score: '', away_score: '', status: 'scheduled', mvp_player_id: '', observations: '' }
-const emptyEvent = { match_id: '', team_id: '', player_id: '', type: 'goal', minute: '' }
-const emptyGoal = { match_id: '', team_id: '', player_id: '', minute: '', goal_type: 'open_play', assist_player_id: '' }
-const emptyCard = { match_id: '', team_id: '', player_id: '', type: 'yellow', minute: '', reason: '' }
-const emptySanction = { sanction_target: 'player', player_id: '', team_id: '', sanction_type: '', reason: '', suspended_matches: '', start_date: '', status: 'active', notes: '' }
+const emptyMatch = { division_id: '', round: 1, match_date: '', venue: '', home_team_id: '', away_team_id: '', home_score: '', away_score: '', status: 'scheduled', mvp_player_id: '', observations: '' }
+const emptyEvent = { division_id: '', match_id: '', team_id: '', player_id: '', type: 'goal', minute: '' }
+const emptyGoal = { division_id: '', match_id: '', team_id: '', player_id: '', minute: '', goal_type: 'open_play', assist_player_id: '' }
+const emptyCard = { division_id: '', match_id: '', team_id: '', player_id: '', type: 'yellow', minute: '', reason: '' }
+const emptySanction = { division_id: '', sanction_target: 'player', player_id: '', team_id: '', sanction_type: '', reason: '', suspended_matches: '', start_date: '', status: 'active', notes: '' }
 const emptyNews = { title: '', excerpt: '', body: '', cover_url: '', coverFile: null }
 
 export default function AdminDashboard({ league }) {
@@ -139,6 +139,9 @@ function DivisionAdmin({ run, busy, league }) {
       <AdminGrid title="Crear o editar divisiones" list={league.divisions.map((division) => `${division.level}. ${division.name}`)}>
         <EntityPicker label="Editar división" items={league.divisions} getLabel={(division) => `${division.level}. ${division.name}`} onPick={(division) => setForm({ ...emptyDivision, ...division })} />
         <Field label="Nombre" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+        <Field label="Slug" value={form.slug || ''} onChange={(slug) => setForm({ ...form, slug })} />
+        <Field label="Descripción" value={form.description || ''} onChange={(description) => setForm({ ...form, description })} />
+        <Select label="Estado" value={String(form.active !== false)} onChange={(active) => setForm({ ...form, active: active === 'true' })} options={[{ id: 'true', name: 'Activa' }, { id: 'false', name: 'Inactiva' }]} />
         <Field label="Nivel / orden" value={form.level} onChange={(level) => setForm({ ...form, level })} />
         <Field label="Equipos que ascienden" value={form.promotion_slots} onChange={(promotion_slots) => setForm({ ...form, promotion_slots })} />
         <Field label="Equipos que descienden" value={form.relegation_slots} onChange={(relegation_slots) => setForm({ ...form, relegation_slots })} />
@@ -226,15 +229,17 @@ function PlayerApprovals({ run, busy, teams, players }) {
 function MatchForm({ run, busy, league }) {
   const [form, setForm] = useState(emptyMatch)
   const [goalForm, setGoalForm] = useState(emptyGoal)
+  const divisionTeams = league.teams.filter((team) => team.division_id === form.division_id)
   const matchPlayers = league.players.filter((player) => [form.home_team_id, form.away_team_id].includes(player.team_id))
-  const validation = validateMatchGoals(form, league.goals)
+  const validation = validateMatch(form, league)
   return <AdminGrid title="Jornadas, calendario y resultados" list={league.matches.map((match) => `J${match.round}`)}>
-    <EntityPicker label="Editar partido" items={league.matches} getLabel={(match) => `J${match.round} - ${match.match_date}`} onPick={(match) => setForm({ ...emptyMatch, ...match, venue: match.venue || '', home_score: match.home_score ?? '', away_score: match.away_score ?? '', mvp_player_id: match.mvp_player_id || '', observations: match.observations || '' })} />
+    <EntityPicker label="Editar partido" items={league.matches} getLabel={(match) => `J${match.round} - ${match.match_date}`} onPick={(match) => setForm({ ...emptyMatch, ...match, division_id: match.division_id || league.teamsById.get(match.home_team_id)?.division_id || '', venue: match.venue || '', home_score: match.home_score ?? '', away_score: match.away_score ?? '', mvp_player_id: match.mvp_player_id || '', observations: match.observations || '' })} />
+    <Select label="División" value={form.division_id || ''} onChange={(division_id) => setForm({ ...form, division_id, home_team_id: '', away_team_id: '', mvp_player_id: '' })} options={league.divisions} />
     <Field label="Jornada" value={form.round} onChange={(round) => setForm({ ...form, round })} />
     <Field label="Fecha y hora" type="datetime-local" value={form.match_date} onChange={(match_date) => setForm({ ...form, match_date })} />
     <Field label="Cancha" value={form.venue || ''} onChange={(venue) => setForm({ ...form, venue })} />
-    <Select label="Local" value={form.home_team_id} onChange={(home_team_id) => setForm({ ...form, home_team_id })} options={league.teams} />
-    <Select label="Visitante" value={form.away_team_id} onChange={(away_team_id) => setForm({ ...form, away_team_id })} options={league.teams} />
+    <Select label="Local" value={form.home_team_id} onChange={(home_team_id) => setForm({ ...form, home_team_id, mvp_player_id: '' })} options={divisionTeams} />
+    <Select label="Visitante" value={form.away_team_id} onChange={(away_team_id) => setForm({ ...form, away_team_id, mvp_player_id: '' })} options={divisionTeams} />
     <Field label="Goles local" value={form.home_score} onChange={(home_score) => setForm({ ...form, home_score })} />
     <Field label="Goles visitante" value={form.away_score} onChange={(away_score) => setForm({ ...form, away_score })} />
     <Select label="Estado" value={form.status} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'scheduled', name: 'Programado' }, { id: 'played', name: 'Jugado' }]} />
@@ -247,13 +252,19 @@ function MatchForm({ run, busy, league }) {
   </AdminGrid>
 }
 
-function validateMatchGoals(match, goals) {
+function validateMatch(match, league) {
+  if (!match.division_id) return 'Selecciona una división'
+  const home = league.teamsById.get(match.home_team_id)
+  const away = league.teamsById.get(match.away_team_id)
+  if (!home || !away) return 'Selecciona local y visitante'
+  if (home.id === away.id) return 'Local y visitante deben ser equipos diferentes'
+  if (home.division_id !== match.division_id || away.division_id !== match.division_id) return 'Los equipos deben pertenecer a la división seleccionada'
   if (!match.id || match.status !== 'played') return ''
   const homeScore = match.home_score === '' ? null : Number(match.home_score)
   const awayScore = match.away_score === '' ? null : Number(match.away_score)
   if (homeScore == null || awayScore == null) return ''
-  const homeGoals = goals.filter((goal) => goal.match_id === match.id && goal.team_id === match.home_team_id).length
-  const awayGoals = goals.filter((goal) => goal.match_id === match.id && goal.team_id === match.away_team_id).length
+  const homeGoals = league.goals.filter((goal) => goal.match_id === match.id && goal.team_id === match.home_team_id).length
+  const awayGoals = league.goals.filter((goal) => goal.match_id === match.id && goal.team_id === match.away_team_id).length
   if (homeGoals < homeScore || awayGoals < awayScore) return 'Falta asignar goleadores'
   if (homeGoals > homeScore || awayGoals > awayScore) return 'Hay más goles registrados que el marcador'
   return ''
@@ -276,7 +287,7 @@ function InlineMatchGoals({ match, goalForm, setGoalForm, busy, run, league }) {
   const teams = league.teams.filter((team) => [match.home_team_id, match.away_team_id].includes(team.id))
   const players = league.players.filter((player) => player.team_id === goalForm.team_id)
   const assists = players.filter((player) => player.id !== goalForm.player_id)
-  const preparedGoal = { ...goalForm, match_id: match.id }
+  const preparedGoal = { ...goalForm, match_id: match.id, division_id: match.division_id }
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-4">
@@ -305,7 +316,10 @@ function GoalForm({ run, busy, league }) {
 
   return <AdminGrid title="Estadísticas de jugadores" list={league.goals.map((goal) => `Gol ${goal.minute}' - ${league.playersById.get(goal.player_id)?.name || 'Jugador'}`)}>
     <EntityPicker label="Editar gol" items={league.goals} getLabel={(goal) => `${league.playersById.get(goal.player_id)?.name || 'Jugador'} ${goal.minute}'`} onPick={(goal) => setForm({ ...emptyGoal, ...goal, assist_player_id: goal.assist_player_id || '' })} />
-    <Select label="Partido" value={form.match_id} onChange={(match_id) => setForm({ ...form, match_id, team_id: '', player_id: '', assist_player_id: '' })} options={league.matches.map((match) => ({ id: match.id, name: `J${match.round} ${league.teamsById.get(match.home_team_id)?.name || 'Local'} vs ${league.teamsById.get(match.away_team_id)?.name || 'Visitante'}` }))} />
+    <Select label="Partido" value={form.match_id} onChange={(match_id) => {
+      const match = league.matches.find((item) => item.id === match_id)
+      setForm({ ...form, match_id, division_id: match?.division_id || league.teamsById.get(match?.home_team_id)?.division_id || '', team_id: '', player_id: '', assist_player_id: '' })
+    }} options={league.matches.map((match) => ({ id: match.id, name: `J${match.round} ${league.divisionsById.get(match.division_id || league.teamsById.get(match.home_team_id)?.division_id)?.name || ''} ${league.teamsById.get(match.home_team_id)?.name || 'Local'} vs ${league.teamsById.get(match.away_team_id)?.name || 'Visitante'}` }))} />
     <Select label="Equipo que anotó" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, player_id: '', assist_player_id: '' })} options={teams} />
     <Select label="Jugador que anotó" value={form.player_id} onChange={(player_id) => setForm({ ...form, player_id, assist_player_id: '' })} options={players} />
     <Field label="Minuto del gol" value={form.minute} onChange={(minute) => setForm({ ...form, minute })} />
@@ -317,7 +331,10 @@ function GoalForm({ run, busy, league }) {
 
 function PlayoffsAdmin({ run, busy, league }) {
   const [form, setForm] = useState(null)
+  const [divisionId, setDivisionId] = useState(league.divisions[0]?.id || '')
   const [thirdPlace, setThirdPlace] = useState(false)
+  const activeDivision = league.divisionTables.find((division) => division.id === divisionId)
+  const playoffMatches = league.playoffMatches.filter((match) => (match.division_id || league.teamsById.get(match.home_team_id)?.division_id) === divisionId)
   const selectedPlayers = form ? league.players.filter((player) => [form.home_team_id, form.away_team_id].includes(player.team_id)) : []
 
   return (
@@ -326,20 +343,25 @@ function PlayoffsAdmin({ run, busy, league }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-black">Playoffs</h2>
-            <p className="mt-1 text-sm text-slate-400">Genera semifinales bloqueando los primeros 4 puestos actuales.</p>
+            <p className="mt-1 text-sm text-slate-400">Genera semifinales con los primeros 4 puestos de la división seleccionada.</p>
           </div>
-          <button className="button" disabled={busy} onClick={() => run(() => generateSemifinals(league.standings), 'Semifinales generadas')}>Generar semifinales</button>
+          <div className="flex flex-wrap gap-2">
+            <select className="input max-w-xs" value={divisionId} onChange={(event) => { setDivisionId(event.target.value); setForm(null) }}>
+              {league.divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}
+            </select>
+            <button className="button" disabled={busy} onClick={() => run(() => generateSemifinals(activeDivision?.standings || [], divisionId), 'Semifinales generadas')}>Generar semifinales</button>
+          </div>
         </div>
       </div>
 
-      <PlayoffBracket matches={league.playoffMatches} teamsById={league.teamsById} />
+      <PlayoffBracket matches={playoffMatches} teamsById={league.teamsById} />
 
       <section className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]">
         <div className="panel p-5">
           <h3 className="mb-4 text-lg font-black">Partidos de playoff</h3>
           <div className="space-y-2">
-            {league.playoffMatches.map((match) => (
-              <button key={match.id} className="button-secondary w-full justify-start" onClick={() => setForm({ ...match, home_score: match.home_score ?? '', away_score: match.away_score ?? '', home_penalties: match.home_penalties ?? '', away_penalties: match.away_penalties ?? '', match_date: match.match_date || '', venue: match.venue || '', mvp_player_id: match.mvp_player_id || '' })}>
+            {playoffMatches.map((match) => (
+              <button key={match.id} className="button-secondary w-full justify-start" onClick={() => setForm({ ...match, division_id: divisionId, home_score: match.home_score ?? '', away_score: match.away_score ?? '', home_penalties: match.home_penalties ?? '', away_penalties: match.away_penalties ?? '', match_date: match.match_date || '', venue: match.venue || '', mvp_player_id: match.mvp_player_id || '' })}>
                 {playoffStageLabel(match.stage)} {match.slot}
               </button>
             ))}
@@ -359,7 +381,7 @@ function PlayoffsAdmin({ run, busy, league }) {
             <Select label="Estado" value={form.status} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'pending', name: 'Pendiente' }, { id: 'played', name: 'Jugado' }, { id: 'finalized', name: 'Finalizado' }]} />
             <Select label="MVP" value={form.mvp_player_id || ''} onChange={(mvp_player_id) => setForm({ ...form, mvp_player_id })} options={selectedPlayers} />
             <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={thirdPlace} onChange={(event) => setThirdPlace(event.target.checked)} /> Crear tercer lugar al cerrar semifinales</label>
-            <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => savePlayoffMatch(form, league.playoffMatches, thirdPlace))} onDelete={() => run(() => deleteRecord('playoff_matches', form.id), 'Partido eliminado')} />
+            <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => savePlayoffMatch({ ...form, division_id: divisionId }, playoffMatches, thirdPlace))} onDelete={() => run(() => deleteRecord('playoff_matches', form.id), 'Partido eliminado')} />
           </>}
         </div>
       </section>
@@ -369,11 +391,17 @@ function PlayoffsAdmin({ run, busy, league }) {
 
 function EventForm({ run, busy, league }) {
   const [form, setForm] = useState(emptyEvent)
+  const selectedMatch = league.matches.find((match) => match.id === form.match_id)
+  const matchTeamIds = selectedMatch ? [selectedMatch.home_team_id, selectedMatch.away_team_id] : []
+  const teams = selectedMatch ? league.teams.filter((team) => matchTeamIds.includes(team.id)) : league.teams
   const players = useMemo(() => league.players.filter((player) => !form.team_id || player.team_id === form.team_id), [league.players, form.team_id])
   return <AdminGrid title="Goleadores y asistencias" list={league.events.map((event) => `${event.type} ${event.minute}'`)}>
     <EntityPicker label="Editar evento" items={league.events} getLabel={(event) => `${event.type} ${event.minute}'`} onPick={(event) => setForm({ ...emptyEvent, ...event })} />
-    <Select label="Partido" value={form.match_id} onChange={(match_id) => setForm({ ...form, match_id })} options={league.matches.map((match) => ({ id: match.id, name: `J${match.round} ${match.match_date}` }))} />
-    <Select label="Equipo" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, player_id: '' })} options={league.teams} />
+    <Select label="Partido" value={form.match_id} onChange={(match_id) => {
+      const match = league.matches.find((item) => item.id === match_id)
+      setForm({ ...form, match_id, division_id: match?.division_id || league.teamsById.get(match?.home_team_id)?.division_id || '', team_id: '', player_id: '' })
+    }} options={league.matches.map((match) => ({ id: match.id, name: `J${match.round} ${league.divisionsById.get(match.division_id || league.teamsById.get(match.home_team_id)?.division_id)?.name || ''} ${match.match_date}` }))} />
+    <Select label="Equipo" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, player_id: '' })} options={teams} />
     <Select label="Jugador" value={form.player_id} onChange={(player_id) => setForm({ ...form, player_id })} options={players} />
     <Select label="Tipo" value={form.type} onChange={(type) => setForm({ ...form, type })} options={[{ id: 'goal', name: 'Gol' }, { id: 'assist', name: 'Asistencia' }]} />
     <Field label="Minuto" value={form.minute} onChange={(minute) => setForm({ ...form, minute })} />
@@ -383,11 +411,17 @@ function EventForm({ run, busy, league }) {
 
 function CardForm({ run, busy, league }) {
   const [form, setForm] = useState(emptyCard)
+  const selectedMatch = league.matches.find((match) => match.id === form.match_id)
+  const matchTeamIds = selectedMatch ? [selectedMatch.home_team_id, selectedMatch.away_team_id] : []
+  const teams = selectedMatch ? league.teams.filter((team) => matchTeamIds.includes(team.id)) : league.teams
   const players = useMemo(() => league.players.filter((player) => !form.team_id || player.team_id === form.team_id), [league.players, form.team_id])
   return <AdminGrid title="Tarjetas por partido" list={league.cards.map((card) => `${card.type} ${card.minute}'`)}>
     <EntityPicker label="Editar tarjeta" items={league.cards} getLabel={(card) => `${card.type} ${card.minute}'`} onPick={(card) => setForm({ ...emptyCard, ...card, reason: card.reason || '' })} />
-    <Select label="Partido" value={form.match_id} onChange={(match_id) => setForm({ ...form, match_id })} options={league.matches.map((match) => ({ id: match.id, name: `J${match.round} ${match.match_date}` }))} />
-    <Select label="Equipo" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, player_id: '' })} options={league.teams} />
+    <Select label="Partido" value={form.match_id} onChange={(match_id) => {
+      const match = league.matches.find((item) => item.id === match_id)
+      setForm({ ...form, match_id, division_id: match?.division_id || league.teamsById.get(match?.home_team_id)?.division_id || '', team_id: '', player_id: '' })
+    }} options={league.matches.map((match) => ({ id: match.id, name: `J${match.round} ${league.divisionsById.get(match.division_id || league.teamsById.get(match.home_team_id)?.division_id)?.name || ''} ${match.match_date}` }))} />
+    <Select label="Equipo" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, player_id: '' })} options={teams} />
     <Select label="Jugador" value={form.player_id} onChange={(player_id) => setForm({ ...form, player_id })} options={players} />
     <Select label="Tipo de tarjeta" value={form.type} onChange={(type) => setForm({ ...form, type })} options={[{ id: 'yellow', name: 'Tarjeta amarilla' }, { id: 'red', name: 'Tarjeta roja' }, { id: 'double_yellow', name: 'Doble amarilla' }]} />
     <Field label="Minuto" value={form.minute} onChange={(minute) => setForm({ ...form, minute })} />
@@ -398,13 +432,17 @@ function CardForm({ run, busy, league }) {
 
 function SanctionForm({ run, busy, league }) {
   const [form, setForm] = useState(emptySanction)
+  const divisionTeams = form.division_id ? league.teams.filter((team) => team.division_id === form.division_id) : league.teams
+  const divisionTeamIds = new Set(divisionTeams.map((team) => team.id))
+  const divisionPlayers = form.division_id ? league.players.filter((player) => divisionTeamIds.has(player.team_id)) : league.players
   return <AdminGrid title="Sanciones" list={league.sanctions.map((sanction) => `${sanction.sanction_type} - ${sanction.status}`)}>
-    <EntityPicker label="Editar sanción" items={league.sanctions} getLabel={(sanction) => `${sanction.sanction_type} - ${sanction.status}`} onPick={(sanction) => setForm({ ...emptySanction, ...sanction, sanction_target: sanction.team_id ? 'team' : 'player' })} />
+    <EntityPicker label="Editar sanción" items={league.sanctions} getLabel={(sanction) => `${sanction.sanction_type} - ${sanction.status}`} onPick={(sanction) => setForm({ ...emptySanction, ...sanction, division_id: sanction.division_id || league.teamsById.get(sanction.team_id)?.division_id || league.playersById.get(sanction.player_id)?.division_id || '', sanction_target: sanction.team_id ? 'team' : 'player' })} />
+    <Select label="División" value={form.division_id || ''} onChange={(division_id) => setForm({ ...form, division_id, player_id: '', team_id: '' })} options={league.divisions} />
     <Select label="Sancionado" value={form.sanction_target} onChange={(sanction_target) => setForm({ ...form, sanction_target })} options={[{ id: 'player', name: 'Jugador' }, { id: 'team', name: 'Equipo' }]} />
     {form.sanction_target === 'player' ? (
-      <Select label="Jugador" value={form.player_id || ''} onChange={(player_id) => setForm({ ...form, player_id })} options={league.players} />
+      <Select label="Jugador" value={form.player_id || ''} onChange={(player_id) => setForm({ ...form, player_id })} options={divisionPlayers} />
     ) : (
-      <Select label="Equipo" value={form.team_id || ''} onChange={(team_id) => setForm({ ...form, team_id })} options={league.teams} />
+      <Select label="Equipo" value={form.team_id || ''} onChange={(team_id) => setForm({ ...form, team_id })} options={divisionTeams} />
     )}
     <Field label="Tipo de sanción" value={form.sanction_type} onChange={(sanction_type) => setForm({ ...form, sanction_type })} />
     <Field label="Motivo" value={form.reason} onChange={(reason) => setForm({ ...form, reason })} />

@@ -60,6 +60,7 @@ export async function registerPlayer(form) {
 
   return supabase.from('players').insert({
     auth_user_id: userId,
+    division_id: form.division_id || null,
     team_id: form.team_id,
     name: form.name,
     email: form.email,

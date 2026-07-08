@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Lock } from 'lucide-react'
 import { hasSupabaseConfig, supabase } from '../../lib/supabase'
+import { adminRoles } from '../../lib/auth'
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('')
@@ -16,10 +17,16 @@ export default function AdminLogin() {
     event.preventDefault()
     setLoading(true)
     setError('')
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (authError) {
       setError(authError.message)
+      return
+    }
+    const { data: profile, error: profileError } = await supabase.from('user_profiles').select('role').eq('id', data.user.id).maybeSingle()
+    if (profileError || !adminRoles.includes(profile?.role)) {
+      await supabase.auth.signOut()
+      setError('Esta cuenta no tiene permiso de administrador. Asigna role = admin en Supabase.')
       return
     }
     navigate('/admin')
@@ -33,6 +40,7 @@ export default function AdminLogin() {
         </div>
         <h1 className="text-3xl font-black">Admin Login</h1>
         <p className="mt-2 text-sm text-slate-400">Acceso privado para administrar la liga.</p>
+        <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">Si ya iniciaste como jugador, entra aquí con la cuenta marcada como admin en Supabase.</p>
         <label className="mt-6 block text-sm font-bold">Email</label>
         <input className="input mt-2" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
         <label className="mt-4 block text-sm font-bold">Contraseña</label>

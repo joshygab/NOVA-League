@@ -9,6 +9,6 @@ export default function AdminRoute({ children }) {
   if (!hasSupabaseConfig) return children
   if (loading) return <div className="grid min-h-screen place-items-center bg-ink text-white">Cargando admin...</div>
   if (!user) return <Navigate to="/admin/login" replace />
-  if (!adminRoles.includes(role)) return <Navigate to="/" replace />
+  if (!adminRoles.includes(role)) return <Navigate to="/admin/login" replace />
   return children
 }

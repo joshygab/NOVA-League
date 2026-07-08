@@ -24,6 +24,9 @@ export async function saveDivision(form) {
     .upsert({
       id: form.id || undefined,
       name: form.name,
+      slug: form.slug || form.name?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      description: form.description || null,
+      active: form.active !== 'false' && form.active !== false,
       level: Number(form.level),
       // Ajusta estos cupos para cambiar cuántos equipos suben/bajan.
       promotion_slots: Number(form.promotion_slots || 0),
@@ -153,6 +156,7 @@ export async function saveMatch(form) {
     .from('matches')
     .upsert({
       id: form.id || undefined,
+      division_id: form.division_id,
       round: Number(form.round),
       match_date: form.match_date,
       home_team_id: form.home_team_id,
@@ -173,6 +177,7 @@ export async function saveEvent(form) {
     .from('match_events')
     .upsert({
       id: form.id || undefined,
+      division_id: form.division_id || null,
       match_id: form.match_id,
       team_id: form.team_id,
       player_id: form.player_id,
@@ -188,6 +193,7 @@ export async function saveGoal(form) {
     .from('goals')
     .upsert({
       id: form.id || undefined,
+      division_id: form.division_id || null,
       match_id: form.match_id,
       team_id: form.team_id,
       player_id: form.player_id,
@@ -204,6 +210,7 @@ export async function saveCard(form) {
     .from('match_cards')
     .upsert({
       id: form.id || undefined,
+      division_id: form.division_id || null,
       match_id: form.match_id,
       team_id: form.team_id,
       player_id: form.player_id,
@@ -231,21 +238,23 @@ function playoffWinner(payload) {
   return homePens > awayPens ? payload.home_team_id : payload.away_team_id
 }
 
-export async function generateSemifinals(standings) {
+export async function generateSemifinals(standings, divisionId) {
   const top = standings.slice(0, 4)
   if (top.length < 4) return { error: { message: 'Se necesitan al menos 4 equipos en la tabla.' } }
 
-  await supabase.from('playoff_matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  if (divisionId) await supabase.from('playoff_matches').delete().eq('division_id', divisionId)
+  else await supabase.from('playoff_matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
   return supabase.from('playoff_matches').upsert([
-    { stage: 'semifinal', slot: 1, home_team_id: top[0].id, away_team_id: top[3].id, home_seed: 1, away_seed: 4, status: 'pending' },
-    { stage: 'semifinal', slot: 2, home_team_id: top[1].id, away_team_id: top[2].id, home_seed: 2, away_seed: 3, status: 'pending' },
-  ], { onConflict: 'stage,slot' })
+    { division_id: divisionId || null, stage: 'semifinal', slot: 1, home_team_id: top[0].id, away_team_id: top[3].id, home_seed: 1, away_seed: 4, status: 'pending' },
+    { division_id: divisionId || null, stage: 'semifinal', slot: 2, home_team_id: top[1].id, away_team_id: top[2].id, home_seed: 2, away_seed: 3, status: 'pending' },
+  ], { onConflict: 'division_id,stage,slot' })
 }
 
 export async function savePlayoffMatch(form, allPlayoffs = [], includeThirdPlace = false) {
   const winner = playoffWinner(form)
   const payload = {
     id: form.id || undefined,
+    division_id: form.division_id || null,
     stage: form.stage,
     slot: Number(form.slot),
     home_team_id: form.home_team_id,
@@ -262,7 +271,7 @@ export async function savePlayoffMatch(form, allPlayoffs = [], includeThirdPlace
     status: form.status,
     mvp_player_id: form.mvp_player_id || null,
   }
-  const result = await supabase.from('playoff_matches').upsert(payload, { onConflict: 'stage,slot' }).select().single()
+  const result = await supabase.from('playoff_matches').upsert(payload, { onConflict: 'division_id,stage,slot' }).select().single()
   if (result.error) return result
 
   const next = allPlayoffs.map((match) => (match.id === result.data.id ? result.data : match))
@@ -272,23 +281,25 @@ export async function savePlayoffMatch(form, allPlayoffs = [], includeThirdPlace
     const final = next.find((match) => match.stage === 'final')
     await supabase.from('playoff_matches').upsert({
       id: final?.id,
+      division_id: form.division_id || null,
       stage: 'final',
       slot: 1,
       home_team_id: sf1.winner_team_id,
       away_team_id: sf2.winner_team_id,
       status: final?.status || 'pending',
-    }, { onConflict: 'stage,slot' })
+    }, { onConflict: 'division_id,stage,slot' })
 
     if (includeThirdPlace) {
       const third = next.find((match) => match.stage === 'third_place')
       await supabase.from('playoff_matches').upsert({
         id: third?.id,
+        division_id: form.division_id || null,
         stage: 'third_place',
         slot: 1,
         home_team_id: sf1.winner_team_id === sf1.home_team_id ? sf1.away_team_id : sf1.home_team_id,
         away_team_id: sf2.winner_team_id === sf2.home_team_id ? sf2.away_team_id : sf2.home_team_id,
         status: third?.status || 'pending',
-      }, { onConflict: 'stage,slot' })
+      }, { onConflict: 'division_id,stage,slot' })
     }
   }
   return result
@@ -299,6 +310,7 @@ export async function saveSanction(form) {
     .from('sanctions')
     .upsert({
       id: form.id || undefined,
+      division_id: form.division_id || null,
       player_id: form.sanction_target === 'player' ? form.player_id || null : null,
       team_id: form.sanction_target === 'team' ? form.team_id || null : null,
       sanction_type: form.sanction_type,

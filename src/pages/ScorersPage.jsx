@@ -1,13 +1,17 @@
 import Crest from '../components/Crest'
+import DivisionTabs from '../components/DivisionTabs'
 import PageTitle from '../components/PageTitle'
 import PlayerAvatar from '../components/PlayerAvatar'
+import { useDivisionLeague } from '../lib/divisionFilters'
 
 export default function ScorersPage({ league }) {
-  const rows = [...league.playerStats].sort((a, b) => b.goals - a.goals || b.goalAverage - a.goalAverage || a.name.localeCompare(b.name))
+  const { divisions, selectedDivision, setDivision, filteredLeague } = useDivisionLeague(league)
+  const rows = [...filteredLeague.playerStats].sort((a, b) => b.goals - a.goals || b.goalAverage - a.goalAverage || a.name.localeCompare(b.name))
 
   return (
     <>
-      <PageTitle kicker="Tabla de goleo" title="Goleadores" />
+      <PageTitle kicker="Tabla de goleo" title={selectedDivision ? `Goleadores ${selectedDivision.name}` : 'Goleadores'} />
+      <DivisionTabs divisions={divisions} activeDivision={selectedDivision} onChange={setDivision} />
       <section className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
@@ -16,7 +20,7 @@ export default function ScorersPage({ league }) {
             </thead>
             <tbody className="divide-y divide-white/10">
               {rows.map((player, index) => {
-                const team = league.teamsById.get(player.team_id)
+                const team = filteredLeague.teamsById.get(player.team_id)
                 const topThree = index < 3
                 return (
                   <tr key={player.id} className={`transition hover:bg-white/[0.05] ${topThree ? 'bg-gold/[0.07]' : ''}`}>

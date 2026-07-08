@@ -1,16 +1,20 @@
 import { Link } from 'react-router-dom'
 import Badge from '../components/Badge'
 import Crest from '../components/Crest'
+import DivisionTabs from '../components/DivisionTabs'
 import PageTitle from '../components/PageTitle'
+import { useDivisionLeague } from '../lib/divisionFilters'
 
 export default function TeamsPage({ league }) {
-  const standingsById = new Map(league.standings.map((team, index) => [team.id, { ...team, tablePosition: index + 1 }]))
+  const { divisions, selectedDivision, setDivision, filteredLeague } = useDivisionLeague(league)
+  const standingsById = new Map(filteredLeague.standings.map((team, index) => [team.id, { ...team, tablePosition: index + 1 }]))
 
   return (
     <>
-      <PageTitle kicker="Índice" title="Equipos" />
+      <PageTitle kicker="Índice" title={selectedDivision ? `Equipos ${selectedDivision.name}` : 'Equipos'} />
+      <DivisionTabs divisions={divisions} activeDivision={selectedDivision} onChange={setDivision} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {league.teams.map((team) => {
+        {filteredLeague.teams.map((team) => {
           const stats = standingsById.get(team.id)
           return (
             <Link key={team.id} to={`/equipos/${team.id}`} className="panel block p-5 transition hover:-translate-y-1 hover:border-electric/50">

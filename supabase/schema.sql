@@ -60,6 +60,10 @@ on conflict (id) do nothing;
 create table public.divisions (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  slug text unique,
+  description text,
+  season_id text,
+  active boolean not null default true,
   level int not null unique,
   promotion_slots int not null default 0,
   relegation_slots int not null default 0,
@@ -100,6 +104,7 @@ create table public.teams (
 create table public.players (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid references auth.users(id) on delete set null,
+  division_id uuid references public.divisions(id) on delete restrict,
   team_id uuid not null references public.teams(id) on delete restrict,
   name text not null,
   email text,
@@ -116,6 +121,7 @@ create table public.players (
 
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid not null references public.divisions(id) on delete restrict,
   round int not null,
   match_date timestamptz not null,
   home_team_id uuid not null references public.teams(id) on delete cascade,
@@ -131,6 +137,7 @@ create table public.matches (
 
 create table public.match_events (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid references public.divisions(id) on delete restrict,
   match_id uuid not null references public.matches(id) on delete cascade,
   team_id uuid not null references public.teams(id) on delete cascade,
   player_id uuid references public.players(id) on delete set null,
@@ -141,6 +148,7 @@ create table public.match_events (
 
 create table public.goals (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid references public.divisions(id) on delete restrict,
   match_id uuid not null references public.matches(id) on delete cascade,
   player_id uuid not null references public.players(id) on delete cascade,
   team_id uuid not null references public.teams(id) on delete cascade,
@@ -152,6 +160,7 @@ create table public.goals (
 
 create table public.match_cards (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid references public.divisions(id) on delete restrict,
   match_id uuid not null references public.matches(id) on delete cascade,
   team_id uuid not null references public.teams(id) on delete cascade,
   player_id uuid references public.players(id) on delete set null,
@@ -163,6 +172,7 @@ create table public.match_cards (
 
 create table public.sanctions (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid references public.divisions(id) on delete restrict,
   player_id uuid references public.players(id) on delete cascade,
   team_id uuid references public.teams(id) on delete cascade,
   sanction_type text not null,
@@ -176,6 +186,7 @@ create table public.sanctions (
 
 create table public.playoff_matches (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid not null references public.divisions(id) on delete restrict,
   stage text not null check (stage in ('semifinal', 'final', 'third_place')),
   slot int not null,
   home_team_id uuid not null references public.teams(id) on delete cascade,
@@ -192,7 +203,7 @@ create table public.playoff_matches (
   status text not null default 'pending' check (status in ('pending', 'played', 'finalized')),
   mvp_player_id uuid references public.players(id) on delete set null,
   created_at timestamptz not null default now(),
-  unique (stage, slot)
+  unique (division_id, stage, slot)
 );
 
 create table public.news (

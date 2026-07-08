@@ -13,6 +13,7 @@ const initialForm = {
   age: '',
   phone: '',
   team_id: '',
+  division_id: '',
   position: '',
   number: '',
   photoFile: null,
@@ -22,7 +23,7 @@ export default function PlayerRegisterPage({ league }) {
   const [form, setForm] = useState(initialForm)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  const teamOptions = useMemo(() => league.teams.map((team) => ({ id: team.id, name: team.name })), [league.teams])
+  const teamOptions = useMemo(() => league.teams.map((team) => ({ id: team.id, name: team.name, division_id: team.division_id })), [league.teams])
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -55,7 +56,10 @@ export default function PlayerRegisterPage({ league }) {
             <Field label="Edad" type="number" value={form.age} onChange={(age) => setForm({ ...form, age })} />
           </div>
           <Field label="Teléfono opcional" type="tel" value={form.phone} onChange={(phone) => setForm({ ...form, phone })} />
-          <Select label="Equipo al que pertenece" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id })} options={teamOptions} required />
+          <Select label="Equipo al que pertenece" value={form.team_id} onChange={(team_id) => {
+            const team = teamOptions.find((item) => item.id === team_id)
+            setForm({ ...form, team_id, division_id: team?.division_id || '' })
+          }} options={teamOptions} required />
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Posición" value={form.position} onChange={(position) => setForm({ ...form, position })} required />
             <Field label="Número de camiseta" type="number" value={form.number} onChange={(number) => setForm({ ...form, number })} />

@@ -20,6 +20,7 @@ Ambas apps leen la misma fuente de datos. En local funciona con datos demo; en p
 - Playoffs automáticos: top 4 a semifinales, bracket público, resultados con penales y campeón.
 - Tabla pública `/goleadores` calculada desde la tabla `goals`.
 - Divisiones: tablas independientes, zonas de ascenso/descenso/campeonato e historial de temporadas.
+- Selector por división en tabla, calendario, partidos, equipos, jugadores, goleadores, estadísticas/sanciones y playoffs.
 - Tabla general calculada automáticamente desde partidos jugados.
 - Cierre de temporada con campeón por división, tabla final, ascendidos, descendidos y reinicio de estadísticas de temporada.
 - Realtime: los cambios en Supabase actualizan la app sin recargar.
@@ -66,6 +67,7 @@ Para una base ya creada, puedes aplicar solo los incrementales necesarios desde 
 - `supabase/add_league_settings.sql`
 - `supabase/add_divisions.sql`
 - `supabase/add_player_auth.sql`
+- `supabase/add_division_isolation.sql`
 
 ## Rutas principales
 
