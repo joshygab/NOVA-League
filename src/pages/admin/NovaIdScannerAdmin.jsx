@@ -9,6 +9,7 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
   const [manualCode, setManualCode] = useState('')
   const [scanResult, setScanResult] = useState(null)
   const [cameraOn, setCameraOn] = useState(false)
+  const [cameraError, setCameraError] = useState('')
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const match = league.matches.find((item) => item.id === matchId)
@@ -17,31 +18,60 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
     if (!cameraOn) return undefined
     let cancelled = false
     async function start() {
-      if (!navigator.mediaDevices?.getUserMedia || !window.BarcodeDetector) return
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
-      const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-      async function tick() {
-        if (cancelled || !videoRef.current) return
-        try {
-          const codes = await detector.detect(videoRef.current)
-          if (codes[0]?.rawValue) {
-            handleLookup(codes[0].rawValue)
-            setCameraOn(false)
-            return
-          }
-        } catch {
-          // Cámara activa pero sin lectura todavía.
+      setCameraError('')
+      try {
+        if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          setCameraError('La cámara necesita HTTPS. En Vercel funciona con https://; en local usa localhost.')
+          setCameraOn(false)
+          return
         }
-        requestAnimationFrame(tick)
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setCameraError('Este navegador no permite usar la cámara. Usa Chrome/Safari actualizado o captura manual.')
+          setCameraOn(false)
+          return
+        }
+        if (!window.BarcodeDetector) {
+          setCameraError('Tu navegador abrió la cámara, pero no soporta lectura QR nativa. Usa el respaldo manual NVL-000001.')
+          setCameraOn(false)
+          return
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        })
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+        streamRef.current = stream
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+        async function tick() {
+          if (cancelled || !videoRef.current) return
+          try {
+            const codes = await detector.detect(videoRef.current)
+            if (codes[0]?.rawValue) {
+              handleLookup(codes[0].rawValue)
+              setCameraOn(false)
+              return
+            }
+          } catch {
+            // Cámara activa pero sin lectura todavía.
+          }
+          requestAnimationFrame(tick)
+        }
+        tick()
+      } catch (error) {
+        setCameraError(error?.name === 'NotAllowedError' ? 'Permiso de cámara denegado. Activa la cámara para este sitio o usa captura manual.' : 'No se pudo iniciar la cámara. Revisa permisos o usa captura manual.')
+        setCameraOn(false)
       }
-      tick()
     }
     start()
     return () => {
       cancelled = true
       streamRef.current?.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
     }
   }, [cameraOn])
 
@@ -88,7 +118,8 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
       <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
         <div className="panel space-y-4 p-5">
           <button className="button min-h-16 w-full text-base" onClick={() => setCameraOn(!cameraOn)}><Camera size={20} />{cameraOn ? 'Detener cámara' : 'Escanear QR'}</button>
-          {cameraOn && <video ref={videoRef} autoPlay playsInline className="aspect-video w-full rounded-lg border border-gold/30 bg-black object-cover" />}
+          {cameraOn && <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full rounded-lg border border-gold/30 bg-black object-cover" />}
+          {cameraError && <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">{cameraError}</p>}
           <div className="rounded-lg border border-white/10 bg-white/5 p-3">
             <p className="text-sm font-bold">Respaldo manual</p>
             <div className="mt-2 flex gap-2">

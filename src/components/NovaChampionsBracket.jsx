@@ -3,6 +3,7 @@ import Badge from './Badge'
 import Crest from './Crest'
 
 const roundLabels = {
+  round_of_32: 'Dieciseisavos',
   round_of_16: 'Octavos',
   quarterfinal: 'Cuartos',
   semifinal: 'Semifinal',
@@ -10,7 +11,7 @@ const roundLabels = {
 }
 
 export default function NovaChampionsBracket({ matches, teamsById }) {
-  const rounds = ['round_of_16', 'quarterfinal', 'semifinal', 'final']
+  const rounds = ['round_of_32', 'round_of_16', 'quarterfinal', 'semifinal', 'final']
   const final = matches.find((match) => match.round === 'final')
   const champion = final?.winner_team_id ? teamsById.get(final.winner_team_id) : null
 
@@ -27,7 +28,8 @@ export default function NovaChampionsBracket({ matches, teamsById }) {
           </div>
         </section>
       )}
-      <div className="grid gap-5 lg:grid-cols-4">
+      <div className="overflow-x-auto pb-3">
+        <div className="grid min-w-[920px] gap-5 lg:min-w-0 lg:grid-cols-5">
         {rounds.map((round) => {
           const rows = matches.filter((match) => match.round === round).sort((a, b) => a.match_order - b.match_order)
           if (!rows.length) return null
@@ -38,6 +40,7 @@ export default function NovaChampionsBracket({ matches, teamsById }) {
             </section>
           )
         })}
+        </div>
       </div>
     </div>
   )
@@ -50,7 +53,7 @@ function CupMatchCard({ match, teamsById }) {
     <article className="rounded-lg border border-gold/20 bg-black/80 p-4 shadow-glow">
       <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
         <span>{roundLabels[match.round]} {match.match_order}</span>
-        <Badge tone={match.status === 'finalized' ? 'gold' : 'slate'}>{match.status}</Badge>
+        <Badge tone={match.status === 'finalized' ? 'gold' : 'slate'}>{statusLabel(match.status)}</Badge>
       </div>
       <TeamRow team={home} score={match.home_score} penalties={match.home_penalties} winner={match.winner_team_id === match.home_team_id} />
       <TeamRow team={away} score={match.away_score} penalties={match.away_penalties} winner={match.winner_team_id === match.away_team_id} />
@@ -60,6 +63,12 @@ function CupMatchCard({ match, teamsById }) {
       </p>
     </article>
   )
+}
+
+function statusLabel(status) {
+  if (status === 'finalized' || status === 'played') return '🟢 Finalizado'
+  if (status === 'live') return '🔵 En vivo'
+  return '🟡 Próximo'
 }
 
 function TeamRow({ team, score, penalties, winner }) {

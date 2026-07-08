@@ -326,7 +326,7 @@ create table public.nova_champions_settings (
   is_active boolean not null default false,
   status text not null default 'coming_soon' check (status in ('coming_soon', 'active', 'finished')),
   season_id text,
-  format int not null default 8 check (format in (4, 8, 16)),
+  format int not null default 8 check (format in (8, 16, 32)),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -347,7 +347,7 @@ create table public.nova_champions_qualified_teams (
 create table public.nova_champions_matches (
   id uuid primary key default gen_random_uuid(),
   season_id text not null,
-  round text not null check (round in ('round_of_16', 'quarterfinal', 'semifinal', 'final')),
+  round text not null check (round in ('round_of_32', 'round_of_16', 'quarterfinal', 'semifinal', 'final')),
   match_order int not null default 1,
   home_team_id uuid references public.teams(id) on delete set null,
   away_team_id uuid references public.teams(id) on delete set null,

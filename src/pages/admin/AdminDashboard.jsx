@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import PageTitle from '../../components/PageTitle'
@@ -86,7 +86,7 @@ export default function AdminDashboard({ league }) {
 
           {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
-        {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} />}
+          {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} run={run} busy={busy} />}
         {tab === 'partidos' && <PartidosHub league={league} setTab={setTab} />}
         {tab === 'equipos' && <EquiposHub league={league} setTab={setTab} run={run} busy={busy} />}
         {tab === 'jugadores' && <JugadoresHub league={league} setTab={setTab} run={run} busy={busy} />}
@@ -147,7 +147,7 @@ function adminTitle(tab) {
   return titles[tab] || tab
 }
 
-function AdminSummary({ league, setTab }) {
+function AdminSummary({ league, setTab, run, busy }) {
   const pending = league.players.filter((player) => player.approval_status === 'pending').length
   const unpublished = league.matches.filter((match) => match.status === 'played').length
   const sanctions = league.sanctions.filter((sanction) => sanction.status === 'active').length
@@ -174,6 +174,8 @@ function AdminSummary({ league, setTab }) {
         <AdminAction title="Ver sanciones" text="Disciplina activa" onClick={() => setTab('sanciones')} />
       </section>
 
+      <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />
+
       <section className="panel p-5">
         <div className="mb-4 flex items-center gap-2">
           <ClipboardList className="text-gold" size={20} />
@@ -185,6 +187,29 @@ function AdminSummary({ league, setTab }) {
         </div>
       </section>
     </div>
+  )
+}
+
+function ChampionsAdminStatus({ league, setTab, run, busy }) {
+  const settings = league.novaChampions?.settings || {}
+  const active = settings.is_active || settings.status === 'active'
+  const season = settings.season_id || new Date().getFullYear().toString()
+  return (
+    <section className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Torneo especial</p>
+          <h3 className="mt-2 text-2xl font-black">NOVA Champions Cup</h3>
+          <p className="mt-1 text-sm text-slate-400">{active ? 'Activa públicamente con bracket y clasificados.' : 'Está en modo próximamente en la app pública.'}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="button-secondary" onClick={() => setTab('nova champions cup')}>Gestionar</button>
+          <button className={active ? 'button-secondary' : 'button'} disabled={busy} onClick={() => run(() => saveNovaChampionsSettings({ ...settings, season_id: season, is_active: !active }), active ? 'Champions Cup desactivada' : 'Champions Cup activada')}>
+            {active ? 'Desactivar' : 'Activar'}
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -221,7 +246,8 @@ function PartidosHub({ league, setTab }) {
         <AdminAction title="Acta digital" text="Capturar partido en vivo" onClick={() => setTab('acta digital')} />
         <AdminAction title="Crear partido" text="Calendario y resultados" onClick={() => setTab('partidos-form')} />
         <AdminAction title="Escáner NOVA ID" text="Validar jugadores" onClick={() => setTab('escáner nova id')} />
-        <AdminAction title="Playoffs y Champions" text="Torneos especiales" onClick={() => setTab('playoffs')} />
+        <AdminAction title="Playoffs" text="Liguilla por división" onClick={() => setTab('playoffs')} />
+        <AdminAction title="Champions Cup" text="Activar y generar bracket" onClick={() => setTab('nova champions cup')} />
       </div>
       <section className="panel p-5">
         <h2 className="text-xl font-black">¿Qué partido vas a capturar?</h2>
@@ -603,8 +629,12 @@ function NovaChampionsAdmin({ run, busy, league }) {
   const [settings, setSettings] = useState({ is_active: Boolean(cup.settings?.is_active), season_id: cup.settings?.season_id || new Date().getFullYear().toString(), format: cup.settings?.format || 8 })
   const [matchForm, setMatchForm] = useState(emptyChampionsMatch)
   const [statForm, setStatForm] = useState(emptyChampionsStat)
+  const [drawMode, setDrawMode] = useState('ranking')
   const qualifiedIds = new Set(cup.qualifiedTeams.map((row) => row.team_id))
-  const qualifiedTeams = league.teams.filter((team) => qualifiedIds.has(team.id))
+  const qualifiedTeams = league.teams.filter((team) => qualifiedIds.has(team.id)).map((team) => {
+    const standingsRow = league.standings.find((row) => row.id === team.id)
+    return { ...team, seed: standingsRow?.position || 999, points: standingsRow?.points || 0 }
+  })
   const selectedMatch = cup.matches.find((match) => match.id === statForm.match_id)
   const matchTeamIds = selectedMatch ? [selectedMatch.home_team_id, selectedMatch.away_team_id] : []
   const statTeams = selectedMatch ? league.teams.filter((team) => matchTeamIds.includes(team.id)) : qualifiedTeams
@@ -613,22 +643,27 @@ function NovaChampionsAdmin({ run, busy, league }) {
 
   return (
     <section className="space-y-6">
-      <div className="panel p-5">
+      <div className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black">NOVA Champions Cup</h2>
-            <p className="mt-1 text-sm text-slate-400">Activa la copa, selecciona clasificados y administra cruces sin afectar la liga regular.</p>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">NOVA Champions Cup</p>
+            <h2 className="mt-2 text-3xl font-black">Gestionar Champions Cup</h2>
+            <p className="mt-1 text-sm text-slate-400">Activa la copa, selecciona clasificados y genera brackets sin afectar la liga regular.</p>
           </div>
-          <button className="button" disabled={busy} onClick={() => run(() => saveNovaChampionsSettings({ ...settings, is_active: true }), 'Copa iniciada')}>Iniciar Copa</button>
+          <div className="flex flex-wrap gap-2">
+            <button className="button" disabled={busy} onClick={() => run(() => saveNovaChampionsSettings({ ...settings, is_active: true }), 'Copa iniciada')}>Activar Copa</button>
+            <button className="button-secondary" disabled={busy} onClick={() => run(() => saveNovaChampionsSettings({ ...settings, is_active: false }), 'Copa desactivada')}>Desactivar</button>
+          </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <Select label="Estado" value={String(settings.is_active)} onChange={(value) => setSettings({ ...settings, is_active: value === 'true' })} options={[{ id: 'false', name: 'Próximamente' }, { id: 'true', name: 'Activa' }]} />
           <Field label="Temporada" value={settings.season_id} onChange={(season_id) => setSettings({ ...settings, season_id })} />
-          <Select label="Formato" value={String(settings.format)} onChange={(format) => setSettings({ ...settings, format })} options={[{ id: '4', name: '4 equipos' }, { id: '8', name: '8 equipos' }, { id: '16', name: '16 equipos' }]} />
+          <Select label="Formato" value={String(settings.format)} onChange={(format) => setSettings({ ...settings, format })} options={[{ id: '8', name: '8 equipos' }, { id: '16', name: '16 equipos' }, { id: '32', name: '32 equipos' }]} />
+          <Select label="Sorteo" value={drawMode} onChange={setDrawMode} options={[{ id: 'ranking', name: 'Por Ranking NOVA' }, { id: 'random', name: 'Aleatorio' }]} />
         </div>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <button className="button-secondary" disabled={busy} onClick={() => run(() => saveNovaChampionsSettings(settings), 'Configuración de copa guardada')}>Guardar estado</button>
-          <button className="button-secondary" disabled={busy} onClick={() => run(() => saveNovaChampionsSettings({ ...settings, is_active: false }), 'Copa desactivada')}>Desactivar copa</button>
+          <button className="button" disabled={busy} onClick={() => run(() => generateNovaChampionsBracket({ teams: qualifiedTeams, seasonId: settings.season_id, format: settings.format, mode: drawMode }), 'Bracket generado')}>GENERAR TORNEO</button>
         </div>
       </div>
 
@@ -653,7 +688,7 @@ function NovaChampionsAdmin({ run, busy, league }) {
         <div className="panel space-y-4 p-5">
           <h3 className="text-lg font-black">Crear o editar llaves</h3>
           <EntityPicker label="Editar cruce" items={cup.matches} getLabel={(match) => `${match.round} ${match.match_order}`} onPick={(match) => setMatchForm({ ...emptyChampionsMatch, ...match, home_score: match.home_score ?? '', away_score: match.away_score ?? '', home_penalties: match.home_penalties ?? '', away_penalties: match.away_penalties ?? '', match_date: match.match_date || '', venue: match.venue || '', mvp_player_id: match.mvp_player_id || '', best_goalkeeper_player_id: match.best_goalkeeper_player_id || '' })} />
-          <Select label="Ronda" value={matchForm.round} onChange={(round) => setMatchForm({ ...matchForm, round })} options={[{ id: 'round_of_16', name: 'Octavos' }, { id: 'quarterfinal', name: 'Cuartos' }, { id: 'semifinal', name: 'Semifinal' }, { id: 'final', name: 'Final' }]} />
+          <Select label="Ronda" value={matchForm.round} onChange={(round) => setMatchForm({ ...matchForm, round })} options={[{ id: 'round_of_32', name: 'Dieciseisavos' }, { id: 'round_of_16', name: 'Octavos' }, { id: 'quarterfinal', name: 'Cuartos' }, { id: 'semifinal', name: 'Semifinal' }, { id: 'final', name: 'Final' }]} />
           <Field label="Orden del partido" value={matchForm.match_order} onChange={(match_order) => setMatchForm({ ...matchForm, match_order })} />
           <Select label="Local" value={matchForm.home_team_id} onChange={(home_team_id) => setMatchForm({ ...matchForm, home_team_id, mvp_player_id: '', best_goalkeeper_player_id: '' })} options={qualifiedTeams} />
           <Select label="Visitante" value={matchForm.away_team_id} onChange={(away_team_id) => setMatchForm({ ...matchForm, away_team_id, mvp_player_id: '', best_goalkeeper_player_id: '' })} options={qualifiedTeams} />

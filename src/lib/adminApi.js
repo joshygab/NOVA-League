@@ -374,7 +374,7 @@ export async function saveNovaChampionsMatch(form) {
         : homePen != null && awayPen != null && homePen !== awayPen ? (homePen > awayPen ? form.home_team_id : form.away_team_id)
           : form.winner_team_id || null
 
-  return supabase.from('nova_champions_matches').upsert({
+  const result = await supabase.from('nova_champions_matches').upsert({
     id: form.id || undefined,
     season_id: form.season_id || new Date().getFullYear().toString(),
     round: form.round,
@@ -392,6 +392,80 @@ export async function saveNovaChampionsMatch(form) {
     mvp_player_id: form.mvp_player_id || null,
     best_goalkeeper_player_id: form.best_goalkeeper_player_id || null,
   }).select().single()
+  if (result.error) return result
+
+  if (winner) {
+    const advance = await advanceNovaChampionsWinner(result.data)
+    if (advance.error) return advance
+  }
+
+  return result
+}
+
+const nextChampionsRound = {
+  round_of_32: 'round_of_16',
+  round_of_16: 'quarterfinal',
+  quarterfinal: 'semifinal',
+  semifinal: 'final',
+}
+
+async function advanceNovaChampionsWinner(match) {
+  const nextRound = nextChampionsRound[match.round]
+  if (!nextRound) return { error: null }
+
+  const nextSlot = Math.ceil(Number(match.match_order) / 2)
+  const field = Number(match.match_order) % 2 === 1 ? 'home_team_id' : 'away_team_id'
+  const existing = await supabase
+    .from('nova_champions_matches')
+    .select('*')
+    .eq('season_id', match.season_id)
+    .eq('round', nextRound)
+    .eq('match_order', nextSlot)
+    .maybeSingle()
+  if (existing.error) return existing
+
+  return supabase.from('nova_champions_matches').upsert({
+    id: existing.data?.id,
+    season_id: match.season_id,
+    round: nextRound,
+    match_order: nextSlot,
+    home_team_id: field === 'home_team_id' ? match.winner_team_id : existing.data?.home_team_id || null,
+    away_team_id: field === 'away_team_id' ? match.winner_team_id : existing.data?.away_team_id || null,
+    status: existing.data?.status || 'scheduled',
+    match_date: existing.data?.match_date || null,
+    venue: existing.data?.venue || null,
+  }, { onConflict: 'season_id,round,match_order' })
+}
+
+export async function generateNovaChampionsBracket({ teams, seasonId, format = 8, mode = 'ranking' }) {
+  const size = Number(format)
+  if (![8, 16, 32].includes(size)) return { error: { message: 'Selecciona formato de 8, 16 o 32 equipos.' } }
+  if (teams.length < size) return { error: { message: `Selecciona al menos ${size} equipos clasificados.` } }
+
+  const selected = mode === 'random'
+    ? [...teams].sort(() => Math.random() - 0.5).slice(0, size)
+    : [...teams].sort((a, b) => Number(a.seed || 999) - Number(b.seed || 999)).slice(0, size)
+
+  const top = selected.slice(0, size / 2)
+  const pot = selected.slice(size / 2)
+  const matches = []
+  top.forEach((team, index) => {
+    let opponentIndex = pot.findIndex((candidate) => candidate.division_id !== team.division_id)
+    if (opponentIndex < 0) opponentIndex = 0
+    const [opponent] = pot.splice(opponentIndex, 1)
+    matches.push({
+      season_id: seasonId,
+      round: size === 32 ? 'round_of_32' : size === 16 ? 'round_of_16' : 'quarterfinal',
+      match_order: index + 1,
+      home_team_id: team.id,
+      away_team_id: opponent?.id || null,
+      status: 'scheduled',
+    })
+  })
+
+  const clear = await supabase.from('nova_champions_matches').delete().eq('season_id', seasonId)
+  if (clear.error) return clear
+  return supabase.from('nova_champions_matches').insert(matches)
 }
 
 export async function saveNovaChampionsStat(form) {

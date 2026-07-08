@@ -8,6 +8,9 @@ create table if not exists public.nova_champions_settings (
   updated_at timestamptz not null default now()
 );
 
+alter table public.nova_champions_settings drop constraint if exists nova_champions_settings_format_check;
+alter table public.nova_champions_settings add constraint nova_champions_settings_format_check check (format in (8, 16, 32));
+
 insert into public.nova_champions_settings (id, is_active, status, season_id, format)
 values (1, false, 'coming_soon', extract(year from now())::text, 8)
 on conflict (id) do nothing;
@@ -41,6 +44,9 @@ create table if not exists public.nova_champions_matches (
   created_at timestamptz not null default now(),
   unique (season_id, round, match_order)
 );
+
+alter table public.nova_champions_matches drop constraint if exists nova_champions_matches_round_check;
+alter table public.nova_champions_matches add constraint nova_champions_matches_round_check check (round in ('round_of_32', 'round_of_16', 'quarterfinal', 'semifinal', 'final'));
 
 create table if not exists public.nova_champions_stats (
   id uuid primary key default gen_random_uuid(),
