@@ -16,11 +16,11 @@ export default function MatchesPage({ league }) {
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
           <h2 className="mb-4 text-xl font-black">Resultados</h2>
-          <div className="space-y-4">{played.map((match) => <Link key={match.id} to={`/partidos/${match.id}`} className="block"><MatchCard match={match} teamsById={filteredLeague.teamsById} playersById={filteredLeague.playersById} /></Link>)}</div>
+          <div className="space-y-4">{played.map((match) => <Link key={match.id} to={`/match/${match.id}`} className="block"><MatchCard match={match} teamsById={filteredLeague.teamsById} playersById={filteredLeague.playersById} /></Link>)}</div>
         </div>
         <div>
           <h2 className="mb-4 text-xl font-black">Próximos</h2>
-          <div className="space-y-4">{scheduled.map((match) => <Link key={match.id} to={`/partidos/${match.id}`} className="block"><MatchCard match={match} teamsById={filteredLeague.teamsById} playersById={filteredLeague.playersById} /></Link>)}</div>
+          <div className="space-y-4">{scheduled.map((match) => <Link key={match.id} to={`/match/${match.id}`} className="block"><MatchCard match={match} teamsById={filteredLeague.teamsById} playersById={filteredLeague.playersById} /></Link>)}</div>
         </div>
       </section>
     </>

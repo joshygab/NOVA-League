@@ -5,8 +5,10 @@ import Badge from '../components/Badge'
 import Crest from '../components/Crest'
 import MatchCard from '../components/MatchCard'
 import StatCard from '../components/StatCard'
+import NovaRatingCard from '../components/NovaRatingCard'
 import { useAuth } from '../lib/AuthContext'
 import { hasSupabaseConfig } from '../lib/supabase'
+import { calculateNovaRating, getPlayerAchievements } from '../lib/playerProgression'
 
 export default function MyPlayerProfilePage({ league }) {
   const { loading, user, player: authPlayer, signOut } = useAuth()
@@ -31,6 +33,9 @@ export default function MyPlayerProfilePage({ league }) {
   const stats = league.playerStatsById.get(player.id)
   const activeSanctions = stats?.activeSanctions || []
   const matchHistory = stats?.matchHistory || []
+  const standing = league.standings.find((row) => row.id === player.team_id)
+  const rating = calculateNovaRating(stats || player, standing)
+  const achievements = getPlayerAchievements(stats || player)
 
   async function handleSignOut() {
     await signOut()
@@ -81,6 +86,20 @@ export default function MyPlayerProfilePage({ league }) {
             <StatCard label="Goles" value={stats?.goals || 0} tone="gold" />
             <StatCard label="Asistencias" value={stats?.assists || 0} />
             <StatCard label="MVP" value={stats?.mvpAwards || 0} tone="gold" />
+          </section>
+
+          <NovaRatingCard rating={rating} />
+
+          <section className="panel p-5">
+            <h2 className="text-xl font-black">Logros desbloqueables</h2>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {achievements.map((achievement) => (
+                <div key={achievement.id} className={`rounded-lg border p-3 ${achievement.unlocked ? 'border-gold/40 bg-gold/10 text-gold shadow-gold' : 'border-white/10 bg-white/5 text-slate-500'}`}>
+                  <p className="font-black">{achievement.icon} {achievement.name}</p>
+                  <p className="mt-1 text-xs">{achievement.description}</p>
+                </div>
+              ))}
+            </div>
           </section>
 
           <section className="grid gap-3 sm:grid-cols-3">

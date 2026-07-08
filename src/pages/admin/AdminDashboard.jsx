@@ -65,7 +65,7 @@ export default function AdminDashboard({ league }) {
 
         {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
-        {tab === 'dashboard' && <AdminSummary league={league} />}
+        {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} />}
         {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
         {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
         {tab === 'equipos' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
@@ -87,18 +87,39 @@ export default function AdminDashboard({ league }) {
   )
 }
 
-function AdminSummary({ league }) {
+function AdminSummary({ league, setTab }) {
   const pending = league.players.filter((player) => player.approval_status === 'pending').length
   const played = league.matches.filter((match) => match.status === 'played').length
   const scheduled = league.matches.filter((match) => match.status !== 'played').length
+  const today = new Date().toISOString().slice(0, 10)
+  const todayMatches = league.matches.filter((match) => match.match_date?.slice(0, 10) === today)
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <AdminMetric label="Equipos" value={league.teams.length} />
-      <AdminMetric label="Jugadores pendientes" value={pending} />
-      <AdminMetric label="Partidos jugados" value={played} />
-      <AdminMetric label="Partidos por cerrar" value={scheduled} />
-    </section>
+    <div className="space-y-6">
+      <section className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+        <h2 className="text-3xl font-black">Hola Administrador</h2>
+        <p className="mt-1 text-gold">HOY</p>
+        <div className="mt-4 grid gap-3">
+          {todayMatches.length === 0 && <p className="text-sm text-slate-400">No hay partidos programados hoy.</p>}
+          {todayMatches.map((match) => (
+            <div key={match.id} className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-4 md:grid-cols-[100px_1fr_auto] md:items-center">
+              <p className="font-black text-gold">{new Date(match.match_date).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })}</p>
+              <div>
+                <p className="font-black">{league.teamsById.get(match.home_team_id)?.name} vs {league.teamsById.get(match.away_team_id)?.name}</p>
+                <p className="text-sm text-slate-400">{match.venue || 'Cancha por definir'}</p>
+              </div>
+              <button className="button" onClick={() => setTab('acta digital')}>INICIAR PARTIDO</button>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminMetric label="Equipos" value={league.teams.length} />
+        <AdminMetric label="Jugadores pendientes" value={pending} />
+        <AdminMetric label="Partidos jugados" value={played} />
+        <AdminMetric label="Partidos por cerrar" value={scheduled} />
+      </section>
+    </div>
   )
 }
 

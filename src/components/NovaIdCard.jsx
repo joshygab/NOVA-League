@@ -4,11 +4,13 @@ import Badge from './Badge'
 import Crest from './Crest'
 import PlayerAvatar from './PlayerAvatar'
 import { novaIdPayload, playerNovaId, playerStatus, qrImageUrl, shortPosition } from '../lib/novaId'
+import { calculateNovaRating } from '../lib/playerProgression'
 
 export default function NovaIdCard({ player, team, division, stats, index = 0 }) {
   const novaId = playerNovaId(player, index)
   const payload = novaIdPayload(player, index)
   const status = playerStatus(player, stats)
+  const rating = calculateNovaRating(stats || player)
 
   async function shareCard() {
     const url = `${window.location.origin}/nova-id/${novaId}`
@@ -34,6 +36,7 @@ export default function NovaIdCard({ player, team, division, stats, index = 0 })
           <p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{novaId}</p>
           <h2 className="mt-1 text-3xl font-black uppercase">{player.name}</h2>
           <p className="text-slate-400">#{player.number || '--'} · {shortPosition(player.position)}</p>
+          <div className="mx-auto mt-3 grid h-16 w-16 place-items-center rounded-lg border border-gold/50 bg-gold/10 text-2xl font-black text-gold">{rating.overall}</div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3">
           <Info label="Equipo" value={team?.name || 'N/D'} />

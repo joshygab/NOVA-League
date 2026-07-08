@@ -56,6 +56,7 @@ export default function App() {
         <Route path="/calendario" element={<MatchesPage league={publicLeague} />} />
         <Route path="/partidos" element={<MatchesPage league={publicLeague} />} />
         <Route path="/partidos/:id" element={<MatchDetailPage league={publicLeague} />} />
+        <Route path="/match/:matchId" element={<MatchDetailPage league={publicLeague} />} />
         <Route path="/playoffs" element={<PlayoffsPage league={publicLeague} />} />
         <Route path="/nova-champions" element={<NovaChampionsPage league={publicLeague} />} />
         <Route path="/equipos" element={<TeamsPage league={publicLeague} />} />
