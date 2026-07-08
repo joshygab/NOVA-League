@@ -1,11 +1,14 @@
 create table if not exists public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
-  role text not null default 'player' check (role in ('player', 'captain', 'admin', 'superadmin')),
+  role text not null default 'player' check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin')),
   full_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.user_profiles drop constraint if exists user_profiles_role_check;
+alter table public.user_profiles add constraint user_profiles_role_check check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin'));
 
 create or replace function public.is_admin()
 returns boolean
@@ -48,6 +51,9 @@ alter table public.players add column if not exists birth_date date;
 alter table public.players add column if not exists requested_team_name text;
 alter table public.players add column if not exists approval_status text not null default 'approved';
 
+-- Ejecuta esta validación después de asignar equipo a cualquier jugador antiguo sin equipo.
+-- alter table public.players alter column team_id set not null;
+
 alter table public.user_profiles enable row level security;
 
 drop policy if exists "public read players" on public.players;
@@ -65,7 +71,7 @@ create policy "users create own profile" on public.user_profiles for insert with
 create policy "admin manage user profiles" on public.user_profiles for all using (public.is_admin()) with check (public.is_admin());
 
 create policy "public read approved players" on public.players for select using (approval_status = 'approved' or auth_user_id = auth.uid() or public.is_admin());
-create policy "players create own pending profile" on public.players for insert with check (auth_user_id = auth.uid() and approval_status = 'pending');
+create policy "players create own pending profile" on public.players for insert with check (auth_user_id = auth.uid() and approval_status = 'pending' and team_id is not null);
 create policy "admin write players" on public.players for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "admin write league settings" on public.league_settings;

@@ -24,6 +24,8 @@ export default function Home({ league }) {
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/tabla" className="button">Ver tabla <ArrowRight size={18} /></Link>
             <Link to="/partidos" className="button-secondary">Calendario</Link>
+            <Link to="/registro" className="button-secondary">Registrarse</Link>
+            <Link to="/login" className="button-secondary">Iniciar sesión</Link>
           </div>
         </motion.div>
         <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-1">

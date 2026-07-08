@@ -1,54 +1,114 @@
-import { useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import { LogOut, UserRound } from 'lucide-react'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { Award, CircleAlert, Goal, Hand, IdCard, LogOut, Shield, UserRound } from 'lucide-react'
 import PageTitle from '../components/PageTitle'
 import Badge from '../components/Badge'
-import { getCurrentUserProfile } from '../lib/auth'
-import { hasSupabaseConfig, supabase } from '../lib/supabase'
+import Crest from '../components/Crest'
+import MatchCard from '../components/MatchCard'
+import StatCard from '../components/StatCard'
+import { useAuth } from '../lib/AuthContext'
+import { hasSupabaseConfig } from '../lib/supabase'
 
 export default function MyPlayerProfilePage({ league }) {
-  const [state, setState] = useState({ loading: true, user: null })
-
-  useEffect(() => {
-    getCurrentUserProfile().then(({ user }) => setState({ loading: false, user }))
-  }, [])
+  const { loading, user, player: authPlayer, signOut } = useAuth()
+  const navigate = useNavigate()
 
   if (!hasSupabaseConfig) return <Navigate to="/login" replace />
-  if (state.loading) return <div className="panel p-5">Cargando perfil...</div>
-  if (!state.user) return <Navigate to="/login" replace />
+  if (loading || league.loading) return <div className="panel p-5">Cargando perfil...</div>
+  if (!user) return <Navigate to="/login" replace />
 
-  const player = league.allPlayers.find((item) => item.auth_user_id === state.user.id || item.email === state.user.email)
-  const team = player ? league.teamsById.get(player.team_id) : null
-  const status = player?.approval_status || 'pending'
+  const player = league.allPlayers.find((item) => item.auth_user_id === user.id) || authPlayer
+  if (!player) {
+    return (
+      <section className="panel p-5">
+        <h1 className="text-2xl font-black">Perfil no encontrado</h1>
+        <p className="mt-2 text-sm text-slate-400">Tu cuenta existe, pero no tiene perfil de jugador asociado.</p>
+        <button className="button-secondary mt-4" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} />Cerrar sesión</button>
+      </section>
+    )
+  }
+
+  const team = league.teamsById.get(player.team_id)
+  const stats = league.playerStatsById.get(player.id)
+  const activeSanctions = stats?.activeSanctions || []
+  const matchHistory = stats?.matchHistory || []
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/login')
+  }
 
   return (
     <>
-      <PageTitle kicker="Cuenta de jugador" title="Mi perfil">
-        <button className="button-secondary" onClick={() => supabase.auth.signOut()}><LogOut size={16} />Salir</button>
+      <PageTitle kicker="Cuenta de jugador" title="Mi Perfil">
+        <button className="button-secondary" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>
       </PageTitle>
-      <section className="grid gap-6 lg:grid-cols-[.7fr_1fr]">
+
+      <section className="grid gap-6 lg:grid-cols-[.75fr_1.25fr]">
         <div className="panel overflow-hidden">
-          <div className="grid aspect-[4/3] place-items-center bg-white/5">
-            {player?.photo_url ? <img src={player.photo_url} alt={player.name} className="h-full w-full object-cover" /> : <UserRound size={64} className="text-slate-500" />}
+          <div className="grid aspect-square place-items-center bg-white/5 p-6">
+            {player.photo_url ? (
+              <img src={player.photo_url} alt={player.name} className="h-44 w-44 rounded-full object-cover ring-4 ring-electric/30" />
+            ) : (
+              <div className="grid h-44 w-44 place-items-center rounded-full bg-white/5 ring-4 ring-white/10">
+                <UserRound size={72} className="text-slate-500" />
+              </div>
+            )}
           </div>
-          <div className="p-5">
-            <Badge tone={status === 'approved' ? 'green' : status === 'rejected' ? 'red' : 'gold'}>{statusLabel(status)}</Badge>
-            <h2 className="mt-3 text-2xl font-black">{player?.name || state.user.email}</h2>
-            <p className="text-sm text-slate-400">{team?.name || player?.requested_team_name || 'Sin equipo asignado'}</p>
+          <div className="space-y-4 p-5">
+            <Badge tone={player.approval_status === 'approved' ? 'green' : 'gold'}>{player.approval_status === 'approved' ? 'Aprobado' : 'Pendiente'}</Badge>
+            <div>
+              <h2 className="text-3xl font-black">{player.name}</h2>
+              <p className="text-sm text-slate-400">{user.email}</p>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+              <Crest src={team?.crest_url} name={team?.name} size="md" />
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-gold">Equipo</p>
+                <p className="font-bold">{team?.name || 'Sin equipo'}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Info icon={IdCard} label="Número" value={player.number || '--'} />
+              <Info icon={Shield} label="Posición" value={player.position || '--'} />
+              <Info icon={UserRound} label="Edad" value={player.age || '--'} />
+            </div>
           </div>
         </div>
-        <div className="panel p-5">
-          <h2 className="text-xl font-black">Datos personales</h2>
-          {!player && <p className="mt-4 text-sm text-gold">Tu cuenta existe, pero todavía no hay perfil de jugador ligado.</p>}
-          {player && (
-            <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-              <Info label="Gmail" value={player.email || state.user.email} />
-              <Info label="Teléfono" value={player.phone || 'Opcional'} />
-              <Info label="Posición" value={player.position || 'Sin definir'} />
-              <Info label="Número" value={player.number || '--'} />
-              <Info label="Edad" value={player.age || 'Sin definir'} />
-              <Info label="Fecha de nacimiento" value={player.birth_date || 'Sin definir'} />
+
+        <div className="space-y-6">
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Partidos" value={stats?.playedMatches || 0} />
+            <StatCard label="Goles" value={stats?.goals || 0} tone="gold" />
+            <StatCard label="Asistencias" value={stats?.assists || 0} />
+            <StatCard label="MVP" value={stats?.mvpAwards || 0} tone="gold" />
+          </section>
+
+          <section className="grid gap-3 sm:grid-cols-3">
+            <SmallMetric icon={Hand} label="Amarillas" value={stats?.yellowCards || 0} />
+            <SmallMetric icon={CircleAlert} label="Rojas" value={stats?.redCards || 0} />
+            <SmallMetric icon={Award} label="Sanciones activas" value={activeSanctions.length} />
+          </section>
+
+          <section className="panel p-5">
+            <h2 className="text-xl font-black">Historial de partidos jugados</h2>
+            <div className="mt-4 space-y-3">
+              {matchHistory.length === 0 && <p className="text-sm text-slate-400">Todavía no hay partidos registrados para este jugador.</p>}
+              {matchHistory.map((match) => <MatchCard key={match.id} match={match} teamsById={league.teamsById} playersById={league.playersById} />)}
             </div>
+          </section>
+
+          {activeSanctions.length > 0 && (
+            <section className="panel p-5">
+              <h2 className="text-xl font-black">Sanciones activas</h2>
+              <div className="mt-4 space-y-2">
+                {activeSanctions.map((sanction) => (
+                  <div key={sanction.id} className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+                    <p className="font-black">{sanction.sanction_type}</p>
+                    <p>{sanction.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
         </div>
       </section>
@@ -56,12 +116,10 @@ export default function MyPlayerProfilePage({ league }) {
   )
 }
 
-function Info({ label, value }) {
-  return <div className="rounded-lg border border-white/10 bg-white/5 p-3"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{label}</p><p className="mt-1 font-semibold text-white">{value}</p></div>
+function Info({ icon: Icon, label, value }) {
+  return <div className="rounded-lg border border-white/10 bg-white/5 p-3"><Icon size={16} className="text-gold" /><p className="mt-2 text-xs text-slate-400">{label}</p><p className="font-black">{value}</p></div>
 }
 
-function statusLabel(status) {
-  if (status === 'approved') return 'Aprobado'
-  if (status === 'rejected') return 'Rechazado'
-  return 'Pendiente de aprobación'
+function SmallMetric({ icon: Icon, label, value }) {
+  return <div className="panel flex items-center gap-3 p-4"><div className="grid h-11 w-11 place-items-center rounded-lg bg-white/5 text-gold"><Icon size={18} /></div><div><p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{label}</p><p className="text-2xl font-black">{value}</p></div></div>
 }

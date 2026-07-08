@@ -10,7 +10,8 @@ Ambas apps leen la misma fuente de datos. En local funciona con datos demo; en p
 ## Funciones
 
 - Zona pública: inicio, divisiones, tabla, calendario, partidos, equipos, jugadores, goleadores, estadísticas, historial, registro y login de jugadores.
-- Registro de jugadores con Gmail, contraseña, datos personales, equipo solicitado, posición, número y foto opcional.
+- Registro de jugadores con correo, contraseña, equipo existente, posición, número, edad y foto opcional.
+- Perfil privado `/perfil` con equipo, escudo, datos del jugador y estadísticas calculadas automáticamente.
 - Los registros quedan pendientes hasta que un administrador los aprueba.
 - Zona privada `/admin`: login de administrador y dashboard separado para administrar la liga.
 - Aprobación/rechazo de jugadores y asignación a equipos.
@@ -72,7 +73,7 @@ Para una base ya creada, puedes aplicar solo los incrementales necesarios desde 
 - Calendario: `/calendario`
 - Registro de jugador: `/registro`
 - Login de jugador: `/login`
-- Perfil del jugador: `/mi-perfil`
+- Perfil del jugador: `/perfil`
 - NOVA Admin: `/admin`
 - Login admin: `/admin/login`
 

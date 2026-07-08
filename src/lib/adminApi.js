@@ -114,8 +114,9 @@ export async function saveLeagueSettings(form) {
 }
 
 export async function savePlayer(form) {
+  if (!form.team_id) return { error: { message: 'Selecciona un equipo para el jugador.' } }
   const payload = {
-    team_id: form.team_id || null,
+    team_id: form.team_id,
     name: form.name,
     email: form.email || null,
     phone: form.phone || null,
@@ -134,7 +135,8 @@ export async function savePlayer(form) {
 }
 
 export async function approvePlayer(playerId, teamId) {
-  return supabase.from('players').update({ approval_status: 'approved', team_id: teamId || null }).eq('id', playerId)
+  if (!teamId) return { error: { message: 'Selecciona un equipo antes de aprobar al jugador.' } }
+  return supabase.from('players').update({ approval_status: 'approved', team_id: teamId }).eq('id', playerId)
 }
 
 export async function rejectPlayer(playerId) {
@@ -142,7 +144,8 @@ export async function rejectPlayer(playerId) {
 }
 
 export async function assignPlayerToTeam(playerId, teamId) {
-  return supabase.from('players').update({ team_id: teamId || null }).eq('id', playerId)
+  if (!teamId) return { error: { message: 'Selecciona un equipo para asignar al jugador.' } }
+  return supabase.from('players').update({ team_id: teamId }).eq('id', playerId)
 }
 
 export async function saveMatch(form) {

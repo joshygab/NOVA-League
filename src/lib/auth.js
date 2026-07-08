@@ -25,14 +25,14 @@ export async function registerPlayer(form) {
     return { error: { message: 'Modo demo: conecta Supabase para crear cuentas reales de jugadores.' } }
   }
 
-  if (!form.email.toLowerCase().endsWith('@gmail.com')) {
-    return { error: { message: 'Usa una cuenta Gmail válida.' } }
-  }
   if (form.password !== form.confirmPassword) {
     return { error: { message: 'Las contraseñas no coinciden.' } }
   }
   if (form.password.length < 6) {
     return { error: { message: 'La contraseña debe tener al menos 6 caracteres.' } }
+  }
+  if (!form.team_id) {
+    return { error: { message: 'Selecciona el equipo al que pertenece el jugador.' } }
   }
 
   const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -50,7 +50,7 @@ export async function registerPlayer(form) {
   const userId = authData.user?.id
   if (!userId) return { error: { message: 'No se pudo crear la cuenta de usuario.' } }
   if (!authData.session) {
-    return { error: { message: 'Cuenta creada. Confirma tu Gmail e inicia sesión para completar el perfil de jugador.' } }
+    return { error: { message: 'Cuenta creada, pero Supabase está pidiendo confirmar el correo. Desactiva Confirm email en Supabase para que entren sin verificar.' } }
   }
 
   let photoUrl = null
@@ -60,8 +60,7 @@ export async function registerPlayer(form) {
 
   return supabase.from('players').insert({
     auth_user_id: userId,
-    team_id: form.team_id || null,
-    requested_team_name: form.requested_team_name || null,
+    team_id: form.team_id,
     name: form.name,
     email: form.email,
     phone: form.phone || null,
@@ -77,9 +76,6 @@ export async function registerPlayer(form) {
 export async function signInPlayer(email, password) {
   if (!hasSupabaseConfig) {
     return { error: { message: 'Modo demo: conecta Supabase para iniciar sesión.' } }
-  }
-  if (!email.toLowerCase().endsWith('@gmail.com')) {
-    return { error: { message: 'El login de jugadores requiere Gmail.' } }
   }
   return supabase.auth.signInWithPassword({ email, password })
 }

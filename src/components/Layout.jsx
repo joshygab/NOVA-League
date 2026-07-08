@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
-import { BarChart3, CalendarDays, Goal, History, Home, LogIn, Menu, Shield, Swords, Trophy, UserPlus, Users, X } from 'lucide-react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { BarChart3, CalendarDays, Goal, History, Home, LogIn, LogOut, Menu, Shield, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { useAuth } from '../lib/AuthContext'
 
 const nav = [
   { to: '/', label: 'Inicio', icon: Home },
@@ -14,16 +15,22 @@ const nav = [
   { to: '/jugadores', label: 'Jugadores', icon: Users },
   { to: '/estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { to: '/historial', label: 'Historial', icon: History },
-  { to: '/registro', label: 'Registro', icon: UserPlus },
-  { to: '/login', label: 'Login', icon: LogIn },
 ]
 
 export default function Layout({ league }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const settings = league.settings || {}
   const shortName = settings.short_name || 'LP'
   const leagueName = settings.name || 'Liga Pro'
   const tagline = settings.tagline || 'Fútbol competitivo'
+
+  async function handleSignOut() {
+    await signOut()
+    setMenuOpen(false)
+    navigate('/login')
+  }
 
   return (
     <div className="min-h-screen pb-24 md:pb-0">
@@ -46,7 +53,17 @@ export default function Layout({ league }) {
             ))}
           </nav>
           <button className="button-secondary lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={18} /></button>
-          <NavLink to="/registro" className="button-secondary hidden lg:inline-flex">Registro</NavLink>
+          {user ? (
+            <div className="hidden items-center gap-2 lg:flex">
+              <NavLink to="/perfil" className="button-secondary"><UserRound size={16} />Mi Perfil</NavLink>
+              <button className="button" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>
+            </div>
+          ) : (
+            <div className="hidden items-center gap-2 lg:flex">
+              <NavLink to="/login" className="button-secondary">Iniciar sesión</NavLink>
+              <NavLink to="/registro" className="button">Registrarse</NavLink>
+            </div>
+          )}
         </div>
       </header>
 
@@ -60,6 +77,17 @@ export default function Layout({ league }) {
             </div>
             <nav className="grid gap-2">
               {nav.map((item) => <NavItem key={item.to} {...item} onClick={() => setMenuOpen(false)} />)}
+              {user ? (
+                <>
+                  <NavItem to="/perfil" label="Mi Perfil" icon={UserRound} onClick={() => setMenuOpen(false)} />
+                  <button className="button-secondary justify-start" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>
+                </>
+              ) : (
+                <>
+                  <NavItem to="/login" label="Iniciar sesión" icon={LogIn} onClick={() => setMenuOpen(false)} />
+                  <NavItem to="/registro" label="Registrarse" icon={UserPlus} onClick={() => setMenuOpen(false)} />
+                </>
+              )}
             </nav>
           </aside>
         </div>

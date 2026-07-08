@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Camera, UserPlus } from 'lucide-react'
+import { Camera, LogIn, UserPlus } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import PageTitle from '../components/PageTitle'
 import { registerPlayer } from '../lib/auth'
 
@@ -12,7 +13,6 @@ const initialForm = {
   age: '',
   phone: '',
   team_id: '',
-  requested_team_name: '',
   position: '',
   number: '',
   photoFile: null,
@@ -45,7 +45,7 @@ export default function PlayerRegisterPage({ league }) {
       <section className="grid gap-6 lg:grid-cols-[1fr_.7fr]">
         <form onSubmit={handleSubmit} className="panel space-y-4 p-5">
           <Field label="Nombre completo" value={form.name} onChange={(name) => setForm({ ...form, name })} required />
-          <Field label="Gmail" type="email" value={form.email} onChange={(email) => setForm({ ...form, email })} required />
+          <Field label="Correo" type="email" value={form.email} onChange={(email) => setForm({ ...form, email })} required />
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Contraseña" type="password" value={form.password} onChange={(password) => setForm({ ...form, password })} required />
             <Field label="Confirmar contraseña" type="password" value={form.confirmPassword} onChange={(confirmPassword) => setForm({ ...form, confirmPassword })} required />
@@ -55,8 +55,7 @@ export default function PlayerRegisterPage({ league }) {
             <Field label="Edad" type="number" value={form.age} onChange={(age) => setForm({ ...form, age })} />
           </div>
           <Field label="Teléfono opcional" type="tel" value={form.phone} onChange={(phone) => setForm({ ...form, phone })} />
-          <Select label="Equipo al que pertenece" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, requested_team_name: '' })} options={teamOptions} />
-          {!form.team_id && <Field label="Solicitud para unirse a equipo" value={form.requested_team_name} onChange={(requested_team_name) => setForm({ ...form, requested_team_name })} />}
+          <Select label="Equipo al que pertenece" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id })} options={teamOptions} required />
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Posición" value={form.position} onChange={(position) => setForm({ ...form, position })} required />
             <Field label="Número de camiseta" type="number" value={form.number} onChange={(number) => setForm({ ...form, number })} />
@@ -70,6 +69,7 @@ export default function PlayerRegisterPage({ league }) {
           </label>
           {message && <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">{message}</p>}
           <button className="button w-full" disabled={busy}><UserPlus size={16} />{busy ? 'Enviando...' : 'Crear cuenta y solicitar aprobación'}</button>
+          <Link to="/login" className="button-secondary w-full"><LogIn size={16} />Ya tengo cuenta, iniciar sesión</Link>
         </form>
 
         <aside className="panel p-5">
@@ -89,6 +89,6 @@ function Field({ label, value, onChange, type = 'text', required = false }) {
   return <label className="block text-sm font-bold">{label}<input className="input mt-2" type={type} value={value} required={required} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
-function Select({ label, value, onChange, options }) {
-  return <label className="block text-sm font-bold">{label}<select className="input mt-2" value={value} onChange={(event) => onChange(event.target.value)}><option value="">Solicitar equipo / sin equipo</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+function Select({ label, value, onChange, options, required = false }) {
+  return <label className="block text-sm font-bold">{label}<select className="input mt-2" value={value} required={required} onChange={(event) => onChange(event.target.value)}><option value="">Seleccionar equipo</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
 }

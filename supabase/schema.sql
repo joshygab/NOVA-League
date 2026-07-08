@@ -3,7 +3,7 @@ create extension if not exists "pgcrypto";
 create table public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
-  role text not null default 'player' check (role in ('player', 'captain', 'admin', 'superadmin')),
+  role text not null default 'player' check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin')),
   full_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -100,7 +100,7 @@ create table public.teams (
 create table public.players (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid references auth.users(id) on delete set null,
-  team_id uuid references public.teams(id) on delete set null,
+  team_id uuid not null references public.teams(id) on delete restrict,
   name text not null,
   email text,
   phone text,
@@ -245,7 +245,7 @@ create policy "public read playoff matches" on public.playoff_matches for select
 create policy "public read news" on public.news for select using (true);
 create policy "public read gallery" on public.gallery for select using (true);
 
-create policy "players create own pending profile" on public.players for insert with check (auth_user_id = auth.uid() and approval_status = 'pending');
+create policy "players create own pending profile" on public.players for insert with check (auth_user_id = auth.uid() and approval_status = 'pending' and team_id is not null);
 create policy "admin write league settings" on public.league_settings for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write divisions" on public.divisions for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write season history" on public.season_history for all using (public.is_admin()) with check (public.is_admin());

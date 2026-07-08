@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Check, LogOut, RefreshCcw, Save, Trash2, X } from 'lucide-react'
 import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
-import { hasSupabaseConfig, supabase } from '../../lib/supabase'
+import { hasSupabaseConfig } from '../../lib/supabase'
+import { useAuth } from '../../lib/AuthContext'
 import PageTitle from '../../components/PageTitle'
 import PlayoffBracket from '../../components/PlayoffBracket'
 import StandingsTable from '../../components/StandingsTable'
@@ -22,6 +24,8 @@ export default function AdminDashboard({ league }) {
   const [tab, setTab] = useState('dashboard')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
 
   async function run(action, done = 'Guardado correctamente') {
     if (!hasSupabaseConfig) {
@@ -45,7 +49,7 @@ export default function AdminDashboard({ league }) {
         <PageTitle kicker="Zona privada" title="Dashboard Admin">
           <div className="flex gap-2">
             <button className="button-secondary" onClick={league.reload}><RefreshCcw size={16} />Actualizar</button>
-            {hasSupabaseConfig && <button className="button-secondary" onClick={() => supabase.auth.signOut()}><LogOut size={16} />Salir</button>}
+            {hasSupabaseConfig && <button className="button-secondary" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} />Cerrar sesión</button>}
           </div>
         </PageTitle>
 
@@ -192,7 +196,7 @@ function PlayerApprovals({ run, busy, teams, players }) {
               </div>
               <div className="flex min-w-[220px] flex-1 flex-wrap justify-end gap-2">
                 <select className="input max-w-xs" value={teamByPlayer[player.id] || player.team_id || ''} onChange={(event) => setTeamByPlayer({ ...teamByPlayer, [player.id]: event.target.value })}>
-                  <option value="">Sin equipo</option>
+                  <option value="">Seleccionar equipo</option>
                   {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
                 </select>
                 <button className="button" disabled={busy} onClick={() => run(() => approvePlayer(player.id, teamByPlayer[player.id] || player.team_id), 'Jugador aprobado')}><Check size={16} />Aprobar</button>
@@ -208,7 +212,7 @@ function PlayerApprovals({ run, busy, teams, players }) {
           <div key={player.id} className="grid gap-2 rounded-lg bg-white/5 p-3 md:grid-cols-[1fr_260px_auto] md:items-center">
             <p className="font-semibold">{player.name}</p>
             <select className="input" value={teamByPlayer[player.id] || player.team_id || ''} onChange={(event) => setTeamByPlayer({ ...teamByPlayer, [player.id]: event.target.value })}>
-              <option value="">Sin equipo</option>
+              <option value="">Seleccionar equipo</option>
               {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
             </select>
             <button className="button-secondary" disabled={busy} onClick={() => run(() => assignPlayerToTeam(player.id, teamByPlayer[player.id] || player.team_id), 'Jugador asignado')}>Asignar</button>

@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useLeagueData } from './lib/useLeagueData'
 import Layout from './components/Layout'
 import AdminRoute from './components/AdminRoute'
@@ -21,9 +22,11 @@ import PlayerLoginPage from './pages/PlayerLoginPage'
 import MyPlayerProfilePage from './pages/MyPlayerProfilePage'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import { useAuth } from './lib/AuthContext'
 
 export default function App() {
   const league = useLeagueData()
+  const auth = useAuth()
   const publicLeague = {
     ...league,
     players: league.publicPlayers,
@@ -31,6 +34,14 @@ export default function App() {
     playerStats: league.playerStats.filter((player) => league.publicPlayersById.has(player.id)),
     playerStatsById: new Map(league.playerStats.filter((player) => league.publicPlayersById.has(player.id)).map((player) => [player.id, player])),
     mvpRanking: league.mvpRanking.filter((player) => league.publicPlayersById.has(player.id)),
+  }
+
+  useEffect(() => {
+    if (!auth.loading) league.reload()
+  }, [auth.loading, auth.user?.id])
+
+  if (auth.loading) {
+    return <div className="grid min-h-screen place-items-center bg-ink px-4 text-center text-white">Cargando sesión...</div>
   }
 
   return (
@@ -53,7 +64,8 @@ export default function App() {
         <Route path="/noticias" element={<NewsPage league={publicLeague} />} />
         <Route path="/registro" element={<PlayerRegisterPage league={league} />} />
         <Route path="/login" element={<PlayerLoginPage />} />
-        <Route path="/mi-perfil" element={<MyPlayerProfilePage league={league} />} />
+        <Route path="/perfil" element={<MyPlayerProfilePage league={league} />} />
+        <Route path="/mi-perfil" element={<Navigate to="/perfil" replace />} />
       </Route>
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route
