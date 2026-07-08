@@ -115,17 +115,34 @@ export async function saveLeagueSettings(form) {
 
 export async function savePlayer(form) {
   const payload = {
-    team_id: form.team_id,
+    team_id: form.team_id || null,
     name: form.name,
+    email: form.email || null,
+    phone: form.phone || null,
+    birth_date: form.birth_date || null,
+    requested_team_name: form.requested_team_name || null,
     position: form.position,
     number: form.number ? Number(form.number) : null,
     age: form.age ? Number(form.age) : null,
     photo_url: form.photo_url || null,
+    approval_status: form.approval_status || 'approved',
   }
   if (form.photoFile) {
     payload.photo_url = await uploadPublicFile('player-photos', `${crypto.randomUUID()}-${form.photoFile.name}`, form.photoFile)
   }
   return supabase.from('players').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+}
+
+export async function approvePlayer(playerId, teamId) {
+  return supabase.from('players').update({ approval_status: 'approved', team_id: teamId || null }).eq('id', playerId)
+}
+
+export async function rejectPlayer(playerId) {
+  return supabase.from('players').update({ approval_status: 'rejected' }).eq('id', playerId)
+}
+
+export async function assignPlayerToTeam(playerId, teamId) {
+  return supabase.from('players').update({ team_id: teamId || null }).eq('id', playerId)
 }
 
 export async function saveMatch(form) {

@@ -16,29 +16,44 @@ import StatsPage from './pages/StatsPage'
 import ScorersPage from './pages/ScorersPage'
 import PlayoffsPage from './pages/PlayoffsPage'
 import NewsPage from './pages/NewsPage'
+import PlayerRegisterPage from './pages/PlayerRegisterPage'
+import PlayerLoginPage from './pages/PlayerLoginPage'
+import MyPlayerProfilePage from './pages/MyPlayerProfilePage'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 
 export default function App() {
   const league = useLeagueData()
+  const publicLeague = {
+    ...league,
+    players: league.publicPlayers,
+    playersById: league.publicPlayersById,
+    playerStats: league.playerStats.filter((player) => league.publicPlayersById.has(player.id)),
+    playerStatsById: new Map(league.playerStats.filter((player) => league.publicPlayersById.has(player.id)).map((player) => [player.id, player])),
+    mvpRanking: league.mvpRanking.filter((player) => league.publicPlayersById.has(player.id)),
+  }
 
   return (
     <Routes>
-      <Route element={<Layout league={league} />}>
-        <Route path="/" element={<Home league={league} />} />
-        <Route path="/divisiones" element={<DivisionsPage league={league} />} />
-        <Route path="/tabla" element={<StandingsPage league={league} />} />
-        <Route path="/partidos" element={<MatchesPage league={league} />} />
-        <Route path="/partidos/:id" element={<MatchDetailPage league={league} />} />
-        <Route path="/playoffs" element={<PlayoffsPage league={league} />} />
-        <Route path="/equipos" element={<TeamsPage league={league} />} />
-        <Route path="/equipos/:id" element={<TeamProfilePage league={league} />} />
-        <Route path="/jugadores" element={<PlayersPage league={league} />} />
-        <Route path="/jugadores/:id" element={<PlayerProfilePage league={league} />} />
-        <Route path="/goleadores" element={<ScorersPage league={league} />} />
-        <Route path="/estadisticas" element={<StatsPage league={league} />} />
-        <Route path="/historial" element={<HistoryPage league={league} />} />
-        <Route path="/noticias" element={<NewsPage league={league} />} />
+      <Route element={<Layout league={publicLeague} />}>
+        <Route path="/" element={<Home league={publicLeague} />} />
+        <Route path="/divisiones" element={<DivisionsPage league={publicLeague} />} />
+        <Route path="/tabla" element={<StandingsPage league={publicLeague} />} />
+        <Route path="/calendario" element={<MatchesPage league={publicLeague} />} />
+        <Route path="/partidos" element={<MatchesPage league={publicLeague} />} />
+        <Route path="/partidos/:id" element={<MatchDetailPage league={publicLeague} />} />
+        <Route path="/playoffs" element={<PlayoffsPage league={publicLeague} />} />
+        <Route path="/equipos" element={<TeamsPage league={publicLeague} />} />
+        <Route path="/equipos/:id" element={<TeamProfilePage league={publicLeague} />} />
+        <Route path="/jugadores" element={<PlayersPage league={publicLeague} />} />
+        <Route path="/jugadores/:id" element={<PlayerProfilePage league={publicLeague} />} />
+        <Route path="/goleadores" element={<ScorersPage league={publicLeague} />} />
+        <Route path="/estadisticas" element={<StatsPage league={publicLeague} />} />
+        <Route path="/historial" element={<HistoryPage league={publicLeague} />} />
+        <Route path="/noticias" element={<NewsPage league={publicLeague} />} />
+        <Route path="/registro" element={<PlayerRegisterPage league={league} />} />
+        <Route path="/login" element={<PlayerLoginPage />} />
+        <Route path="/mi-perfil" element={<MyPlayerProfilePage league={league} />} />
       </Route>
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route

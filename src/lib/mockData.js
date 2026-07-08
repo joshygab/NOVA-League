@@ -17,18 +17,19 @@ export const mockSeasonHistory = []
 
 export const mockLeagueSettings = {
   id: 1,
-  name: 'Liga Pro Futbol',
-  short_name: 'LP',
-  tagline: 'Fútbol competitivo',
-  description: 'Resultados, tabla, estadísticas, noticias y administración profesional para una liga moderna.',
+  name: 'NOVA League',
+  short_name: 'NOVA',
+  tagline: 'Liga competitiva de fútbol',
+  description: 'Divisiones, calendario, tabla, estadísticas y registro de jugadores en una plataforma conectada.',
   logo_url: '',
 }
 
 export const mockPlayers = [
-  { id: '1', team_id: '1', name: 'Mateo Salas', position: 'Delantero', number: 9, age: 25, photo_url: '' },
-  { id: '2', team_id: '2', name: 'Luis Herrera', position: 'Medio', number: 10, age: 27, photo_url: '' },
-  { id: '3', team_id: '3', name: 'Diego Cruz', position: 'Defensa', number: 4, age: 24, photo_url: '' },
-  { id: '4', team_id: '4', name: 'Bruno Vega', position: 'Portero', number: 1, age: 29, photo_url: '' },
+  { id: '1', team_id: '1', name: 'Mateo Salas', email: 'mateo@gmail.com', phone: '', birth_date: '2001-03-10', position: 'Delantero', number: 9, age: 25, photo_url: '', approval_status: 'approved' },
+  { id: '2', team_id: '2', name: 'Luis Herrera', email: 'luis@gmail.com', phone: '', birth_date: '1999-08-21', position: 'Medio', number: 10, age: 27, photo_url: '', approval_status: 'approved' },
+  { id: '3', team_id: '3', name: 'Diego Cruz', email: 'diego@gmail.com', phone: '', birth_date: '2002-01-15', position: 'Defensa', number: 4, age: 24, photo_url: '', approval_status: 'approved' },
+  { id: '4', team_id: '4', name: 'Bruno Vega', email: 'bruno@gmail.com', phone: '', birth_date: '1997-05-04', position: 'Portero', number: 1, age: 29, photo_url: '', approval_status: 'approved' },
+  { id: '5', team_id: null, requested_team_name: 'Atlético Norte', name: 'Carlos Méndez', email: 'carlos@gmail.com', phone: '555-0101', birth_date: '2004-09-12', position: 'Extremo', number: 11, age: 21, photo_url: '', approval_status: 'pending' },
 ]
 
 export const mockMatches = [

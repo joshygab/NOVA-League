@@ -1,7 +1,7 @@
 import { supabase, hasSupabaseConfig } from './supabase'
 import { mockCards, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockPlayers, mockPlayoffMatches, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
 
-const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery']
+const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery', 'user_profiles']
 
 export async function fetchLeagueData() {
   if (!hasSupabaseConfig) {

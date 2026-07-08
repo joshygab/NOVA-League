@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { LogOut, RefreshCcw, Save, Trash2 } from 'lucide-react'
-import { closeSeason, deleteRecord, generateSemifinals, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
+import { Check, LogOut, RefreshCcw, Save, Trash2, X } from 'lucide-react'
+import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig, supabase } from '../../lib/supabase'
 import PageTitle from '../../components/PageTitle'
 import PlayoffBracket from '../../components/PlayoffBracket'
@@ -10,7 +10,7 @@ import { goalTypes, playoffStageLabel } from '../../lib/labels'
 const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
 const emptyDivision = { name: '', level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
 const emptyLeagueSettings = { name: '', short_name: '', tagline: '', description: '', logo_url: '', logoFile: null }
-const emptyPlayer = { team_id: '', name: '', position: '', number: '', age: '', photo_url: '', photoFile: null }
+const emptyPlayer = { team_id: '', name: '', email: '', phone: '', birth_date: '', requested_team_name: '', position: '', number: '', age: '', approval_status: 'approved', photo_url: '', photoFile: null }
 const emptyMatch = { round: 1, match_date: '', venue: '', home_team_id: '', away_team_id: '', home_score: '', away_score: '', status: 'scheduled', mvp_player_id: '', observations: '' }
 const emptyEvent = { match_id: '', team_id: '', player_id: '', type: 'goal', minute: '' }
 const emptyGoal = { match_id: '', team_id: '', player_id: '', minute: '', goal_type: 'open_play', assist_player_id: '' }
@@ -19,7 +19,7 @@ const emptySanction = { sanction_target: 'player', player_id: '', team_id: '', s
 const emptyNews = { title: '', excerpt: '', body: '', cover_url: '', coverFile: null }
 
 export default function AdminDashboard({ league }) {
-  const [tab, setTab] = useState('equipos')
+  const [tab, setTab] = useState('dashboard')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -50,17 +50,19 @@ export default function AdminDashboard({ league }) {
         </PageTitle>
 
         <div className="mb-6 flex flex-wrap gap-2">
-          {['liga', 'divisiones', 'equipos', 'jugadores', 'partidos', 'estadísticas de jugadores', 'playoffs', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
+          {['dashboard', 'liga', 'divisiones', 'equipos', 'jugadores', 'aprobaciones', 'partidos', 'estadísticas de jugadores', 'playoffs', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
             <button key={item} onClick={() => setTab(item)} className={tab === item ? 'button' : 'button-secondary'}>{item}</button>
           ))}
         </div>
 
         {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
+        {tab === 'dashboard' && <AdminSummary league={league} />}
         {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
         {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
         {tab === 'equipos' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
         {tab === 'jugadores' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
+        {tab === 'aprobaciones' && <PlayerApprovals busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
         {tab === 'playoffs' && <PlayoffsAdmin busy={busy} run={run} league={league} />}
@@ -72,6 +74,25 @@ export default function AdminDashboard({ league }) {
       </div>
     </main>
   )
+}
+
+function AdminSummary({ league }) {
+  const pending = league.players.filter((player) => player.approval_status === 'pending').length
+  const played = league.matches.filter((match) => match.status === 'played').length
+  const scheduled = league.matches.filter((match) => match.status !== 'played').length
+
+  return (
+    <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <AdminMetric label="Equipos" value={league.teams.length} />
+      <AdminMetric label="Jugadores pendientes" value={pending} />
+      <AdminMetric label="Partidos jugados" value={played} />
+      <AdminMetric label="Partidos por cerrar" value={scheduled} />
+    </section>
+  )
+}
+
+function AdminMetric({ label, value }) {
+  return <div className="panel p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{label}</p><p className="mt-3 text-4xl font-black">{value}</p></div>
 }
 
 function LeagueSettingsForm({ run, busy, settings }) {
@@ -135,16 +156,67 @@ function DivisionAdmin({ run, busy, league }) {
 
 function PlayerForm({ run, busy, teams, players }) {
   const [form, setForm] = useState(emptyPlayer)
-  return <AdminGrid title="Crear o editar jugadores" list={players.map((player) => player.name)}>
+  return <AdminGrid title="Crear o editar jugadores" list={players.map((player) => `${player.name} · ${statusLabel(player.approval_status)}`)}>
     <EntityPicker label="Editar jugador" items={players} onPick={(player) => setForm({ ...emptyPlayer, ...player })} />
     <Select label="Equipo" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id })} options={teams} />
     <Field label="Nombre" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+    <Field label="Gmail" value={form.email || ''} onChange={(email) => setForm({ ...form, email })} />
+    <Field label="Teléfono" value={form.phone || ''} onChange={(phone) => setForm({ ...form, phone })} />
+    <Field label="Fecha de nacimiento" type="date" value={form.birth_date || ''} onChange={(birth_date) => setForm({ ...form, birth_date })} />
+    <Field label="Solicitud de equipo" value={form.requested_team_name || ''} onChange={(requested_team_name) => setForm({ ...form, requested_team_name })} />
     <Field label="Posición" value={form.position} onChange={(position) => setForm({ ...form, position })} />
     <Field label="Número" value={form.number || ''} onChange={(number) => setForm({ ...form, number })} />
     <Field label="Edad" value={form.age || ''} onChange={(age) => setForm({ ...form, age })} />
+    <Select label="Estado de aprobación" value={form.approval_status || 'approved'} onChange={(approval_status) => setForm({ ...form, approval_status })} options={[{ id: 'pending', name: 'Pendiente' }, { id: 'approved', name: 'Aprobado' }, { id: 'rejected', name: 'Rechazado' }]} />
     <FileField label="Foto" onChange={(photoFile) => setForm({ ...form, photoFile })} />
     <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => savePlayer(form))} onDelete={() => run(() => deleteRecord('players', form.id), 'Jugador eliminado correctamente')} />
   </AdminGrid>
+}
+
+function PlayerApprovals({ run, busy, teams, players }) {
+  const [teamByPlayer, setTeamByPlayer] = useState({})
+  const pending = players.filter((player) => player.approval_status === 'pending')
+
+  return (
+    <section className="panel p-5">
+      <h2 className="text-xl font-black">Aprobación de registros de jugadores</h2>
+      <div className="mt-5 grid gap-3">
+        {pending.length === 0 && <p className="text-sm text-slate-400">No hay jugadores pendientes.</p>}
+        {pending.map((player) => (
+          <div key={player.id} className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-lg font-black">{player.name}</p>
+                <p className="text-sm text-slate-400">{player.email || 'Sin Gmail'} · {player.position || 'Sin posición'} · #{player.number || '--'}</p>
+                <p className="mt-1 text-sm text-gold">Solicitud: {player.requested_team_name || teams.find((team) => team.id === player.team_id)?.name || 'Sin equipo'}</p>
+              </div>
+              <div className="flex min-w-[220px] flex-1 flex-wrap justify-end gap-2">
+                <select className="input max-w-xs" value={teamByPlayer[player.id] || player.team_id || ''} onChange={(event) => setTeamByPlayer({ ...teamByPlayer, [player.id]: event.target.value })}>
+                  <option value="">Sin equipo</option>
+                  {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                </select>
+                <button className="button" disabled={busy} onClick={() => run(() => approvePlayer(player.id, teamByPlayer[player.id] || player.team_id), 'Jugador aprobado')}><Check size={16} />Aprobar</button>
+                <button className="button-secondary border-red-400/30 text-red-200" disabled={busy} onClick={() => run(() => rejectPlayer(player.id), 'Jugador rechazado')}><X size={16} />Rechazar</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <h3 className="mt-8 text-lg font-black">Asignar jugadores aprobados</h3>
+      <div className="mt-3 grid gap-2">
+        {players.filter((player) => player.approval_status === 'approved').map((player) => (
+          <div key={player.id} className="grid gap-2 rounded-lg bg-white/5 p-3 md:grid-cols-[1fr_260px_auto] md:items-center">
+            <p className="font-semibold">{player.name}</p>
+            <select className="input" value={teamByPlayer[player.id] || player.team_id || ''} onChange={(event) => setTeamByPlayer({ ...teamByPlayer, [player.id]: event.target.value })}>
+              <option value="">Sin equipo</option>
+              {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+            <button className="button-secondary" disabled={busy} onClick={() => run(() => assignPlayerToTeam(player.id, teamByPlayer[player.id] || player.team_id), 'Jugador asignado')}>Asignar</button>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function MatchForm({ run, busy, league }) {
@@ -396,4 +468,10 @@ function ActionRow({ busy, canDelete, onSave, onDelete }) {
       {canDelete && <button className="button-secondary border-red-400/30 text-red-200 hover:border-red-400" disabled={busy} onClick={onDelete}><Trash2 size={16} />Eliminar</button>}
     </div>
   )
+}
+
+function statusLabel(status) {
+  if (status === 'approved') return 'Aprobado'
+  if (status === 'rejected') return 'Rechazado'
+  return 'Pendiente'
 }

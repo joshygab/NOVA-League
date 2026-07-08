@@ -1,11 +1,54 @@
 create extension if not exists "pgcrypto";
 
+create table public.user_profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  role text not null default 'player' check (role in ('player', 'captain', 'admin', 'superadmin')),
+  full_name text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.user_profiles
+    where id = auth.uid()
+      and role in ('admin', 'superadmin')
+  );
+$$;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.user_profiles (id, email, role, full_name)
+  values (new.id, new.email, 'player', new.raw_user_meta_data ->> 'full_name')
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
 create table public.league_settings (
   id int primary key default 1 check (id = 1),
-  name text not null default 'Liga Pro Futbol',
-  short_name text not null default 'LP',
-  tagline text default 'Fútbol competitivo',
-  description text default 'Resultados, tabla, estadísticas, noticias y administración profesional para una liga moderna.',
+  name text not null default 'NOVA League',
+  short_name text not null default 'NOVA',
+  tagline text default 'Liga competitiva de fútbol',
+  description text default 'Divisiones, calendario, tabla, estadísticas y registro de jugadores en una plataforma conectada.',
   logo_url text,
   updated_at timestamptz not null default now()
 );
@@ -56,12 +99,18 @@ create table public.teams (
 
 create table public.players (
   id uuid primary key default gen_random_uuid(),
+  auth_user_id uuid references auth.users(id) on delete set null,
   team_id uuid references public.teams(id) on delete set null,
   name text not null,
+  email text,
+  phone text,
+  birth_date date,
+  requested_team_name text,
   position text,
   number int,
   age int,
   photo_url text,
+  approval_status text not null default 'approved' check (approval_status in ('pending', 'approved', 'rejected')),
   created_at timestamptz not null default now()
 );
 
@@ -163,6 +212,7 @@ create table public.gallery (
   created_at timestamptz not null default now()
 );
 
+alter table public.user_profiles enable row level security;
 alter table public.teams enable row level security;
 alter table public.league_settings enable row level security;
 alter table public.divisions enable row level security;
@@ -177,11 +227,15 @@ alter table public.playoff_matches enable row level security;
 alter table public.news enable row level security;
 alter table public.gallery enable row level security;
 
+create policy "users read own profile" on public.user_profiles for select using (id = auth.uid() or public.is_admin());
+create policy "users create own profile" on public.user_profiles for insert with check (id = auth.uid() and role = 'player');
+create policy "admin manage user profiles" on public.user_profiles for all using (public.is_admin()) with check (public.is_admin());
+
 create policy "public read league settings" on public.league_settings for select using (true);
 create policy "public read divisions" on public.divisions for select using (true);
 create policy "public read season history" on public.season_history for select using (true);
 create policy "public read teams" on public.teams for select using (true);
-create policy "public read players" on public.players for select using (true);
+create policy "public read approved players" on public.players for select using (approval_status = 'approved' or auth_user_id = auth.uid() or public.is_admin());
 create policy "public read matches" on public.matches for select using (true);
 create policy "public read match events" on public.match_events for select using (true);
 create policy "public read goals" on public.goals for select using (true);
@@ -191,19 +245,20 @@ create policy "public read playoff matches" on public.playoff_matches for select
 create policy "public read news" on public.news for select using (true);
 create policy "public read gallery" on public.gallery for select using (true);
 
-create policy "admin write league settings" on public.league_settings for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write divisions" on public.divisions for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write season history" on public.season_history for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write teams" on public.teams for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write players" on public.players for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write matches" on public.matches for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write match events" on public.match_events for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write goals" on public.goals for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write match cards" on public.match_cards for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write sanctions" on public.sanctions for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write playoff matches" on public.playoff_matches for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write news" on public.news for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "admin write gallery" on public.gallery for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "players create own pending profile" on public.players for insert with check (auth_user_id = auth.uid() and approval_status = 'pending');
+create policy "admin write league settings" on public.league_settings for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write divisions" on public.divisions for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write season history" on public.season_history for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write teams" on public.teams for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write players" on public.players for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write matches" on public.matches for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write match events" on public.match_events for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write goals" on public.goals for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write match cards" on public.match_cards for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write sanctions" on public.sanctions for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write playoff matches" on public.playoff_matches for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write news" on public.news for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write gallery" on public.gallery for all using (public.is_admin()) with check (public.is_admin());
 
 insert into storage.buckets (id, name, public)
 values
@@ -222,11 +277,13 @@ create policy "public read gallery images" on storage.objects for select using (
 
 create policy "admin upload league assets" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'league-assets') with check (auth.role() = 'authenticated' and bucket_id = 'league-assets');
 create policy "admin upload team crests" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'team-crests') with check (auth.role() = 'authenticated' and bucket_id = 'team-crests');
-create policy "admin upload player photos" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'player-photos') with check (auth.role() = 'authenticated' and bucket_id = 'player-photos');
+create policy "players upload own photos" on storage.objects for insert with check (auth.role() = 'authenticated' and bucket_id = 'player-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "admin upload player photos" on storage.objects for all using (public.is_admin() and bucket_id = 'player-photos') with check (public.is_admin() and bucket_id = 'player-photos');
 create policy "admin upload news covers" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'news-covers') with check (auth.role() = 'authenticated' and bucket_id = 'news-covers');
 create policy "admin upload gallery images" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'gallery') with check (auth.role() = 'authenticated' and bucket_id = 'gallery');
 
 alter publication supabase_realtime add table public.league_settings;
+alter publication supabase_realtime add table public.user_profiles;
 alter publication supabase_realtime add table public.divisions;
 alter publication supabase_realtime add table public.season_history;
 alter publication supabase_realtime add table public.teams;

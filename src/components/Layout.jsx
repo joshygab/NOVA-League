@@ -1,20 +1,21 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { BarChart3, CalendarDays, Goal, History, Home, Menu, Newspaper, Settings, Shield, Swords, Trophy, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Goal, History, Home, LogIn, Menu, Shield, Swords, Trophy, UserPlus, Users, X } from 'lucide-react'
 
 const nav = [
-  { to: '/', label: 'Home', icon: Home },
+  { to: '/', label: 'Inicio', icon: Home },
   { to: '/divisiones', label: 'Divisiones', icon: Trophy },
   { to: '/tabla', label: 'Tabla', icon: Trophy },
-  { to: '/partidos', label: 'Partidos', icon: CalendarDays },
+  { to: '/calendario', label: 'Calendario', icon: CalendarDays },
+  { to: '/partidos', label: 'Partidos', icon: Swords },
   { to: '/playoffs', label: 'Playoffs', icon: Swords },
   { to: '/goleadores', label: 'Goleadores', icon: Goal },
   { to: '/equipos', label: 'Equipos', icon: Shield },
   { to: '/jugadores', label: 'Jugadores', icon: Users },
-  { to: '/estadisticas', label: 'Stats', icon: BarChart3 },
+  { to: '/estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { to: '/historial', label: 'Historial', icon: History },
-  { to: '/noticias', label: 'Noticias', icon: Newspaper },
-  { to: '/admin', label: 'Configuración', icon: Settings },
+  { to: '/registro', label: 'Registro', icon: UserPlus },
+  { to: '/login', label: 'Login', icon: LogIn },
 ]
 
 export default function Layout({ league }) {
@@ -45,7 +46,7 @@ export default function Layout({ league }) {
             ))}
           </nav>
           <button className="button-secondary lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={18} /></button>
-          <NavLink to="/admin" className="button-secondary hidden lg:inline-flex">Admin</NavLink>
+          <NavLink to="/registro" className="button-secondary hidden lg:inline-flex">Registro</NavLink>
         </div>
       </header>
 
