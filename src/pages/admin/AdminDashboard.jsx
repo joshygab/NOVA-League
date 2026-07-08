@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { LogOut, RefreshCcw, Save, Trash2 } from 'lucide-react'
-import { deleteRecord, generateSemifinals, saveCard, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
+import { closeSeason, deleteRecord, generateSemifinals, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig, supabase } from '../../lib/supabase'
 import PageTitle from '../../components/PageTitle'
 import PlayoffBracket from '../../components/PlayoffBracket'
 import StandingsTable from '../../components/StandingsTable'
 import { goalTypes, playoffStageLabel } from '../../lib/labels'
 
-const emptyTeam = { name: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
+const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
+const emptyDivision = { name: '', level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
 const emptyLeagueSettings = { name: '', short_name: '', tagline: '', description: '', logo_url: '', logoFile: null }
 const emptyPlayer = { team_id: '', name: '', position: '', number: '', age: '', photo_url: '', photoFile: null }
 const emptyMatch = { round: 1, match_date: '', venue: '', home_team_id: '', away_team_id: '', home_score: '', away_score: '', status: 'scheduled', mvp_player_id: '', observations: '' }
@@ -49,7 +50,7 @@ export default function AdminDashboard({ league }) {
         </PageTitle>
 
         <div className="mb-6 flex flex-wrap gap-2">
-          {['liga', 'equipos', 'jugadores', 'partidos', 'estadísticas de jugadores', 'playoffs', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
+          {['liga', 'divisiones', 'equipos', 'jugadores', 'partidos', 'estadísticas de jugadores', 'playoffs', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
             <button key={item} onClick={() => setTab(item)} className={tab === item ? 'button' : 'button-secondary'}>{item}</button>
           ))}
         </div>
@@ -57,7 +58,8 @@ export default function AdminDashboard({ league }) {
         {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
         {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
-        {tab === 'equipos' && <TeamForm busy={busy} run={run} teams={league.teams} />}
+        {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
+        {tab === 'equipos' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
         {tab === 'jugadores' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
@@ -87,11 +89,12 @@ function LeagueSettingsForm({ run, busy, settings }) {
   </AdminGrid>
 }
 
-function TeamForm({ run, busy, teams }) {
+function TeamForm({ run, busy, teams, divisions }) {
   const [form, setForm] = useState(emptyTeam)
   return <AdminGrid title="Crear o editar equipos" list={teams.map((team) => team.name)}>
     <EntityPicker label="Editar equipo" items={teams} onPick={(team) => setForm({ ...emptyTeam, ...team })} />
     <Field label="Nombre" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+    <Select label="División" value={form.division_id || ''} onChange={(division_id) => setForm({ ...form, division_id })} options={divisions} />
     <Field label="Ciudad" value={form.city} onChange={(city) => setForm({ ...form, city })} />
     <Field label="Capitán" value={form.captain || ''} onChange={(captain) => setForm({ ...form, captain })} />
     <Field label="Categoría" value={form.category || ''} onChange={(category) => setForm({ ...form, category })} />
@@ -100,6 +103,34 @@ function TeamForm({ run, busy, teams }) {
     <FileField label="Escudo" onChange={(crestFile) => setForm({ ...form, crestFile })} />
     <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => saveTeam(form))} onDelete={() => run(() => deleteRecord('teams', form.id), 'Equipo eliminado correctamente')} />
   </AdminGrid>
+}
+
+function DivisionAdmin({ run, busy, league }) {
+  const [form, setForm] = useState(emptyDivision)
+  const [season, setSeason] = useState(new Date().getFullYear().toString())
+
+  return (
+    <section className="space-y-6">
+      <AdminGrid title="Crear o editar divisiones" list={league.divisions.map((division) => `${division.level}. ${division.name}`)}>
+        <EntityPicker label="Editar división" items={league.divisions} getLabel={(division) => `${division.level}. ${division.name}`} onPick={(division) => setForm({ ...emptyDivision, ...division })} />
+        <Field label="Nombre" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+        <Field label="Nivel / orden" value={form.level} onChange={(level) => setForm({ ...form, level })} />
+        <Field label="Equipos que ascienden" value={form.promotion_slots} onChange={(promotion_slots) => setForm({ ...form, promotion_slots })} />
+        <Field label="Equipos que descienden" value={form.relegation_slots} onChange={(relegation_slots) => setForm({ ...form, relegation_slots })} />
+        <Field label="Zona campeonato / liguilla" value={form.championship_slots} onChange={(championship_slots) => setForm({ ...form, championship_slots })} />
+        <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => saveDivision(form), 'División guardada')} onDelete={() => run(() => deleteRecord('divisions', form.id), 'División eliminada')} />
+      </AdminGrid>
+
+      <div className="panel p-5">
+        <h2 className="text-xl font-black">Cerrar temporada</h2>
+        <p className="mt-2 text-sm text-slate-400">Guarda campeones, ascensos, descensos y tabla final. Después mueve equipos y reinicia partidos/estadísticas para una nueva temporada.</p>
+        <div className="mt-4 max-w-sm">
+          <Field label="Temporada / año" value={season} onChange={setSeason} />
+        </div>
+        <button className="button mt-4" disabled={busy} onClick={() => run(() => closeSeason({ season, divisionTables: league.divisionTables }), 'Temporada cerrada y divisiones actualizadas')}>Aplicar ascensos y descensos</button>
+      </div>
+    </section>
+  )
 }
 
 function PlayerForm({ run, busy, teams, players }) {

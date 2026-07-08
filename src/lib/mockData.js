@@ -1,9 +1,19 @@
 export const mockTeams = [
-  { id: '1', name: 'Atlético Norte', city: 'Monterrey', crest_url: '', founded: 2017, captain: 'Mateo Salas', category: 'Libre', season: '2026' },
-  { id: '2', name: 'Deportivo Azul', city: 'Guadalajara', crest_url: '', founded: 2019, captain: 'Luis Herrera', category: 'Libre', season: '2026' },
-  { id: '3', name: 'Real Central', city: 'CDMX', crest_url: '', founded: 2016, captain: 'Diego Cruz', category: 'Libre', season: '2026' },
-  { id: '4', name: 'Titanes FC', city: 'Querétaro', crest_url: '', founded: 2021, captain: 'Bruno Vega', category: 'Libre', season: '2026' },
+  { id: '1', division_id: 'd1', name: 'Atlético Norte', city: 'Monterrey', crest_url: '', founded: 2017, captain: 'Mateo Salas', category: 'Libre', season: '2026' },
+  { id: '2', division_id: 'd1', name: 'Deportivo Azul', city: 'Guadalajara', crest_url: '', founded: 2019, captain: 'Luis Herrera', category: 'Libre', season: '2026' },
+  { id: '3', division_id: 'd2', name: 'Real Central', city: 'CDMX', crest_url: '', founded: 2016, captain: 'Diego Cruz', category: 'Libre', season: '2026' },
+  { id: '4', division_id: 'd2', name: 'Titanes FC', city: 'Querétaro', crest_url: '', founded: 2021, captain: 'Bruno Vega', category: 'Libre', season: '2026' },
 ]
+
+// Configura aquí los cupos de ascenso/descenso para pruebas locales.
+// En producción estos valores se editan desde Supabase/Admin.
+export const mockDivisions = [
+  { id: 'd1', name: 'Primera División', level: 1, promotion_slots: 0, relegation_slots: 1, championship_slots: 4 },
+  { id: 'd2', name: 'Segunda División', level: 2, promotion_slots: 1, relegation_slots: 1, championship_slots: 2 },
+  { id: 'd3', name: 'Tercera División', level: 3, promotion_slots: 1, relegation_slots: 0, championship_slots: 2 },
+]
+
+export const mockSeasonHistory = []
 
 export const mockLeagueSettings = {
   id: 1,

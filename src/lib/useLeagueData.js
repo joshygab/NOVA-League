@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchLeagueData, subscribeToLeagueChanges } from './data'
-import { buildMvpRanking, buildPlayerStats, calculateStandings } from './standings'
+import { buildMvpRanking, buildPlayerStats, calculateDivisionStandings, calculateStandings } from './standings'
 
 export function useLeagueData() {
-  const [data, setData] = useState({ teams: [], players: [], matches: [], goals: [], events: [], cards: [], sanctions: [], playoffMatches: [], news: [], gallery: [], settings: null })
+  const [data, setData] = useState({ divisions: [], seasonHistory: [], teams: [], players: [], matches: [], goals: [], events: [], cards: [], sanctions: [], playoffMatches: [], news: [], gallery: [], settings: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -25,8 +25,10 @@ export function useLeagueData() {
   }, [])
 
   const teamsById = useMemo(() => new Map(data.teams.map((team) => [team.id, team])), [data.teams])
+  const divisionsById = useMemo(() => new Map(data.divisions.map((division) => [division.id, division])), [data.divisions])
   const playersById = useMemo(() => new Map(data.players.map((player) => [player.id, player])), [data.players])
   const standings = useMemo(() => calculateStandings(data.teams, data.matches), [data.teams, data.matches])
+  const divisionTables = useMemo(() => calculateDivisionStandings(data.divisions, data.teams, data.matches), [data.divisions, data.teams, data.matches])
   const playerStats = useMemo(
     () => buildPlayerStats(data.players, data.goals, data.events, data.cards, data.matches, data.sanctions),
     [data.players, data.goals, data.events, data.cards, data.matches, data.sanctions],
@@ -34,5 +36,5 @@ export function useLeagueData() {
   const playerStatsById = useMemo(() => new Map(playerStats.map((player) => [player.id, player])), [playerStats])
   const mvpRanking = useMemo(() => buildMvpRanking(data.players, data.matches), [data.players, data.matches])
 
-  return { ...data, loading, error, standings, playerStats, playerStatsById, mvpRanking, teamsById, playersById, reload: load }
+  return { ...data, loading, error, standings, divisionTables, playerStats, playerStatsById, mvpRanking, teamsById, divisionsById, playersById, reload: load }
 }

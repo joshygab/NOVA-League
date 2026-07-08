@@ -9,6 +9,7 @@ App web profesional para una liga de fútbol con React, Vite, Tailwind CSS, Supa
 - Estadísticas individuales: goleadores, asistencias, MVP, disciplina, sanciones y perfil completo de jugador.
 - Playoffs automáticos: top 4 a semifinales, bracket público, resultados con penales y campeón.
 - Tabla pública `/goleadores` calculada desde la tabla `goals`.
+- Divisiones: tablas independientes, zonas de ascenso/descenso/campeonato e historial de temporadas.
 - Tabla general calculada automáticamente desde partidos jugados.
 - Realtime: los cambios en Supabase actualizan la app sin recargar.
 - Diseño oscuro responsive con navegación inferior en móvil.
@@ -37,6 +38,11 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 5. En Database > Replication confirma que las tablas estén activas para Realtime.
 
 Si ya habías creado la base con una versión anterior, crea una copia de seguridad y aplica los cambios nuevos de `supabase/schema.sql`: columnas `captain`, `category` y `season` en `teams`; `age` en `players`; `venue`, `mvp_player_id` y `observations` en `matches`; y tablas `goals`, `match_cards`, `sanctions` y `playoff_matches`.
+
+Para una base ya creada, puedes aplicar solo los incrementales necesarios desde SQL Editor:
+
+- `supabase/add_league_settings.sql`
+- `supabase/add_divisions.sql`
 
 ## Vercel
 

@@ -14,8 +14,36 @@ insert into public.league_settings (id)
 values (1)
 on conflict (id) do nothing;
 
+create table public.divisions (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  level int not null unique,
+  promotion_slots int not null default 0,
+  relegation_slots int not null default 0,
+  championship_slots int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+insert into public.divisions (name, level, promotion_slots, relegation_slots, championship_slots)
+values
+  ('Primera División', 1, 0, 1, 4),
+  ('Segunda División', 2, 1, 1, 2),
+  ('Tercera División', 3, 1, 0, 2)
+on conflict (level) do nothing;
+
+create table public.season_history (
+  id uuid primary key default gen_random_uuid(),
+  season text not null,
+  champions jsonb not null default '[]'::jsonb,
+  promoted jsonb not null default '[]'::jsonb,
+  relegated jsonb not null default '[]'::jsonb,
+  final_tables jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table public.teams (
   id uuid primary key default gen_random_uuid(),
+  division_id uuid references public.divisions(id) on delete set null,
   name text not null,
   city text,
   founded int,
@@ -137,6 +165,8 @@ create table public.gallery (
 
 alter table public.teams enable row level security;
 alter table public.league_settings enable row level security;
+alter table public.divisions enable row level security;
+alter table public.season_history enable row level security;
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.match_events enable row level security;
@@ -148,6 +178,8 @@ alter table public.news enable row level security;
 alter table public.gallery enable row level security;
 
 create policy "public read league settings" on public.league_settings for select using (true);
+create policy "public read divisions" on public.divisions for select using (true);
+create policy "public read season history" on public.season_history for select using (true);
 create policy "public read teams" on public.teams for select using (true);
 create policy "public read players" on public.players for select using (true);
 create policy "public read matches" on public.matches for select using (true);
@@ -160,6 +192,8 @@ create policy "public read news" on public.news for select using (true);
 create policy "public read gallery" on public.gallery for select using (true);
 
 create policy "admin write league settings" on public.league_settings for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "admin write divisions" on public.divisions for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "admin write season history" on public.season_history for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "admin write teams" on public.teams for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "admin write players" on public.players for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "admin write matches" on public.matches for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -193,6 +227,8 @@ create policy "admin upload news covers" on storage.objects for all using (auth.
 create policy "admin upload gallery images" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'gallery') with check (auth.role() = 'authenticated' and bucket_id = 'gallery');
 
 alter publication supabase_realtime add table public.league_settings;
+alter publication supabase_realtime add table public.divisions;
+alter publication supabase_realtime add table public.season_history;
 alter publication supabase_realtime add table public.teams;
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;

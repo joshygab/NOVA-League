@@ -1,12 +1,14 @@
 import { supabase, hasSupabaseConfig } from './supabase'
-import { mockCards, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockPlayers, mockPlayoffMatches, mockSanctions, mockTeams } from './mockData'
+import { mockCards, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockPlayers, mockPlayoffMatches, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
 
-const tables = ['league_settings', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery']
+const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery']
 
 export async function fetchLeagueData() {
   if (!hasSupabaseConfig) {
     return {
       teams: mockTeams,
+      divisions: mockDivisions,
+      seasonHistory: mockSeasonHistory,
       players: mockPlayers,
       matches: mockMatches,
       goals: mockGoals,
@@ -20,8 +22,10 @@ export async function fetchLeagueData() {
     }
   }
 
-  const [settings, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery] = await Promise.all([
+  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery] = await Promise.all([
     supabase.from('league_settings').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('divisions').select('*').order('level'),
+    supabase.from('season_history').select('*').order('created_at', { ascending: false }),
     supabase.from('teams').select('*').order('name'),
     supabase.from('players').select('*').order('name'),
     supabase.from('matches').select('*').order('match_date'),
@@ -34,11 +38,13 @@ export async function fetchLeagueData() {
     supabase.from('gallery').select('*').order('created_at', { ascending: false }),
   ])
 
-  const error = [settings, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery].find((result) => result.error)?.error
+  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery].find((result) => result.error)?.error
   if (error) throw error
 
   return {
     teams: teams.data ?? [],
+    divisions: divisions.data ?? [],
+    seasonHistory: seasonHistory.data ?? [],
     players: players.data ?? [],
     matches: matches.data ?? [],
     goals: goals.data ?? [],

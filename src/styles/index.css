@@ -31,14 +31,14 @@
   }
 
   .input {
-    @apply w-full rounded-lg border border-white/10 bg-ink/70 px-3 py-2 text-sm text-white outline-none transition focus:border-electric;
+    @apply min-h-11 w-full rounded-lg border border-white/10 bg-ink/70 px-3 py-2 text-base text-white outline-none transition focus:border-electric md:text-sm;
   }
 
   .button {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-electric px-4 py-2 text-sm font-bold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-electric px-4 py-2 text-sm font-bold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:border-gold/70 hover:text-gold;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:border-gold/70 hover:text-gold;
   }
 }

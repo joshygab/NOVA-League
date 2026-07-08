@@ -4,6 +4,8 @@ import Layout from './components/Layout'
 import AdminRoute from './components/AdminRoute'
 import Home from './pages/Home'
 import StandingsPage from './pages/StandingsPage'
+import DivisionsPage from './pages/DivisionsPage'
+import HistoryPage from './pages/HistoryPage'
 import MatchesPage from './pages/MatchesPage'
 import MatchDetailPage from './pages/MatchDetailPage'
 import TeamsPage from './pages/TeamsPage'
@@ -24,6 +26,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout league={league} />}>
         <Route path="/" element={<Home league={league} />} />
+        <Route path="/divisiones" element={<DivisionsPage league={league} />} />
         <Route path="/tabla" element={<StandingsPage league={league} />} />
         <Route path="/partidos" element={<MatchesPage league={league} />} />
         <Route path="/partidos/:id" element={<MatchDetailPage league={league} />} />
@@ -34,6 +37,7 @@ export default function App() {
         <Route path="/jugadores/:id" element={<PlayerProfilePage league={league} />} />
         <Route path="/goleadores" element={<ScorersPage league={league} />} />
         <Route path="/estadisticas" element={<StatsPage league={league} />} />
+        <Route path="/historial" element={<HistoryPage league={league} />} />
         <Route path="/noticias" element={<NewsPage league={league} />} />
       </Route>
       <Route path="/admin/login" element={<AdminLogin />} />

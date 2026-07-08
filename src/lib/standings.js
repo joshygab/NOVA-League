@@ -54,6 +54,40 @@ export function calculateStandings(teams = [], matches = []) {
     .sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name))
 }
 
+export function calculateDivisionStandings(divisions = [], teams = [], matches = []) {
+  const fallbackDivision = divisions[0]
+  return divisions.map((division) => {
+    const divisionTeams = teams.filter((team) => (team.division_id || fallbackDivision?.id) === division.id)
+    const divisionTeamIds = new Set(divisionTeams.map((team) => team.id))
+    const divisionMatches = matches.filter((match) => divisionTeamIds.has(match.home_team_id) && divisionTeamIds.has(match.away_team_id))
+    const standings = calculateStandings(divisionTeams, divisionMatches)
+    return {
+      ...division,
+      teams: divisionTeams,
+      matches: divisionMatches,
+      standings: markDivisionZones(standings, division),
+    }
+  })
+}
+
+export function markDivisionZones(standings, division) {
+  const promotionSlots = Number(division.promotion_slots || 0)
+  const relegationSlots = Number(division.relegation_slots || 0)
+  const championshipSlots = Number(division.championship_slots || 0)
+
+  return standings.map((team, index) => {
+    const position = index + 1
+    const inPromotion = promotionSlots > 0 && position <= promotionSlots
+    const inChampionship = championshipSlots > 0 && position <= championshipSlots
+    const inRelegation = relegationSlots > 0 && position > standings.length - relegationSlots
+    return {
+      ...team,
+      position,
+      zone: inPromotion ? 'promotion' : inRelegation ? 'relegation' : inChampionship ? 'championship' : 'neutral',
+    }
+  })
+}
+
 export function buildPlayerStats(players = [], goals = [], events = [], cards = [], matches = [], sanctions = []) {
   const stats = new Map(
     players.map((player) => [

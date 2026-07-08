@@ -4,6 +4,7 @@ import { uploadPublicFile } from './data'
 export async function saveTeam(form) {
   const payload = {
     name: form.name,
+    division_id: form.division_id || null,
     city: form.city,
     founded: form.founded ? Number(form.founded) : null,
     captain: form.captain || null,
@@ -15,6 +16,86 @@ export async function saveTeam(form) {
     payload.crest_url = await uploadPublicFile('team-crests', `${crypto.randomUUID()}-${form.crestFile.name}`, form.crestFile)
   }
   return supabase.from('teams').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+}
+
+export async function saveDivision(form) {
+  return supabase
+    .from('divisions')
+    .upsert({
+      id: form.id || undefined,
+      name: form.name,
+      level: Number(form.level),
+      // Ajusta estos cupos para cambiar cuántos equipos suben/bajan.
+      promotion_slots: Number(form.promotion_slots || 0),
+      relegation_slots: Number(form.relegation_slots || 0),
+      championship_slots: Number(form.championship_slots || 0),
+    })
+    .select()
+    .single()
+}
+
+export async function closeSeason({ season, divisionTables }) {
+  const ordered = [...divisionTables].sort((a, b) => a.level - b.level)
+  const champions = []
+  const promoted = []
+  const relegated = []
+  const finalTables = ordered.map((division) => ({
+    division_id: division.id,
+    division_name: division.name,
+    table: division.standings.map(({ id, name, position, played, won, drawn, lost, goalsFor, goalsAgainst, goalDifference, points }) => ({
+      team_id: id,
+      team_name: name,
+      position,
+      played,
+      won,
+      drawn,
+      lost,
+      goalsFor,
+      goalsAgainst,
+      goalDifference,
+      points,
+    })),
+  }))
+
+  const moves = []
+  ordered.forEach((division, index) => {
+    const champion = division.standings[0]
+    if (champion) champions.push({ team_id: champion.id, team_name: champion.name, division_id: division.id, division_name: division.name })
+
+    const upper = ordered[index - 1]
+    const lower = ordered[index + 1]
+    const promotionSlots = Number(division.promotion_slots || 0)
+    const relegationSlots = Number(division.relegation_slots || 0)
+
+    if (upper && promotionSlots > 0) {
+      division.standings.slice(0, promotionSlots).forEach((team) => {
+        promoted.push({ team_id: team.id, team_name: team.name, from_division_id: division.id, to_division_id: upper.id, division_name: division.name })
+        moves.push({ teamId: team.id, divisionId: upper.id })
+      })
+    }
+
+    if (lower && relegationSlots > 0) {
+      division.standings.slice(-relegationSlots).forEach((team) => {
+        relegated.push({ team_id: team.id, team_name: team.name, from_division_id: division.id, to_division_id: lower.id, division_name: division.name })
+        moves.push({ teamId: team.id, divisionId: lower.id })
+      })
+    }
+  })
+
+  const history = await supabase.from('season_history').insert({ season, champions, promoted, relegated, final_tables: finalTables })
+  if (history.error) return history
+
+  for (const move of moves) {
+    const result = await supabase.from('teams').update({ division_id: move.divisionId }).eq('id', move.teamId)
+    if (result.error) return result
+  }
+
+  await supabase.from('goals').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  await supabase.from('match_cards').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  await supabase.from('match_events').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  await supabase.from('playoff_matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  return { error: null }
 }
 
 export async function saveLeagueSettings(form) {
