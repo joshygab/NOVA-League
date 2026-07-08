@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { Camera, CheckCircle, Search, ShieldAlert, XCircle } from 'lucide-react'
 import PlayerAvatar from '../../components/PlayerAvatar'
 import { confirmNovaIdAttendance } from '../../lib/adminApi'
@@ -10,15 +11,86 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
   const [scanResult, setScanResult] = useState(null)
   const [cameraOn, setCameraOn] = useState(false)
   const [cameraError, setCameraError] = useState('')
+  const [cameraMode, setCameraMode] = useState('environment')
+  const [cameraId, setCameraId] = useState('')
+  const [cameras, setCameras] = useState([])
+  const [verified, setVerified] = useState(false)
+  const [scannerEngine, setScannerEngine] = useState('')
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const qrRef = useRef(null)
+  const scannerId = 'nova-id-html5-reader'
   const match = league.matches.find((item) => item.id === matchId)
 
   useEffect(() => {
     if (!cameraOn) return undefined
     let cancelled = false
+    let frameId = 0
+
+    async function stopNativeCamera() {
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+
+    async function stopHtmlScanner() {
+      if (!qrRef.current) return
+      try {
+        await qrRef.current.stop()
+      } catch {
+        // El lector puede estar detenido ya.
+      }
+      try {
+        await qrRef.current.clear()
+      } catch {
+        // Limpieza defensiva del contenedor.
+      }
+      qrRef.current = null
+    }
+
+    function onDetected(raw) {
+      if (cancelled) return
+      setVerified(true)
+      navigator.vibrate?.(200)
+      handleLookup(raw)
+      setTimeout(() => {
+        if (!cancelled) setCameraOn(false)
+      }, 450)
+    }
+
+    async function startHtmlScanner(reason = '') {
+      await stopNativeCamera()
+      if (cancelled) return
+      setScannerEngine('html5')
+      if (reason) setCameraError(reason)
+      const devices = await Html5Qrcode.getCameras()
+      setCameras(devices)
+      if (!devices.length) {
+        setCameraError('No se encontró una cámara disponible.')
+        setCameraOn(false)
+        return
+      }
+      const selectedCamera = cameraId || devices.find((device) => /back|rear|environment|trasera/i.test(device.label))?.id || devices[0].id
+      setCameraId(selectedCamera)
+      const scanner = new Html5Qrcode(scannerId, {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false,
+      })
+      qrRef.current = scanner
+      await scanner.start(
+        selectedCamera,
+        { fps: 10, qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72)
+          return { width: size, height: size }
+        } },
+        onDetected,
+        () => {}
+      )
+    }
+
     async function start() {
       setCameraError('')
+      setVerified(false)
+      setScannerEngine('')
       try {
         if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
           setCameraError('La cámara necesita HTTPS. En Vercel funciona con https://; en local usa localhost.')
@@ -31,12 +103,11 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
           return
         }
         if (!window.BarcodeDetector) {
-          setCameraError('Tu navegador abrió la cámara, pero no soporta lectura QR nativa. Usa el respaldo manual NVL-000001.')
-          setCameraOn(false)
+          await startHtmlScanner('')
           return
         }
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: cameraId ? { deviceId: { exact: cameraId } } : { facingMode: { ideal: cameraMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         })
         if (cancelled) {
@@ -44,6 +115,7 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
           return
         }
         streamRef.current = stream
+        setScannerEngine('native')
         videoRef.current.srcObject = stream
         await videoRef.current.play()
         const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
@@ -52,28 +124,58 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
           try {
             const codes = await detector.detect(videoRef.current)
             if (codes[0]?.rawValue) {
-              handleLookup(codes[0].rawValue)
-              setCameraOn(false)
+              onDetected(codes[0].rawValue)
               return
             }
           } catch {
-            // Cámara activa pero sin lectura todavía.
+            await startHtmlScanner('')
+            return
           }
-          requestAnimationFrame(tick)
+          frameId = requestAnimationFrame(tick)
         }
         tick()
       } catch (error) {
-        setCameraError(error?.name === 'NotAllowedError' ? 'Permiso de cámara denegado. Activa la cámara para este sitio o usa captura manual.' : 'No se pudo iniciar la cámara. Revisa permisos o usa captura manual.')
-        setCameraOn(false)
+        if (error?.name === 'NotAllowedError') {
+          setCameraError('No tenemos permiso para usar la cámara. Actívala en ajustes.')
+          setCameraOn(false)
+          return
+        }
+        if (error?.name === 'NotFoundError' || error?.name === 'OverconstrainedError') {
+          setCameraError('No se encontró una cámara disponible.')
+          setCameraOn(false)
+          return
+        }
+        try {
+          await startHtmlScanner('')
+        } catch {
+          setCameraError('No se pudo iniciar la cámara. Revisa permisos o usa captura manual.')
+          setCameraOn(false)
+        }
       }
     }
     start()
     return () => {
       cancelled = true
-      streamRef.current?.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
+      if (frameId) cancelAnimationFrame(frameId)
+      stopNativeCamera()
+      stopHtmlScanner()
     }
-  }, [cameraOn])
+  }, [cameraOn, cameraId, cameraMode])
+
+  function switchCamera() {
+    if (cameras.length > 1) {
+      const currentIndex = cameras.findIndex((camera) => camera.id === cameraId)
+      const next = cameras[(currentIndex + 1 + cameras.length) % cameras.length]
+      setCameraId(next.id)
+    } else {
+      setCameraMode((mode) => mode === 'environment' ? 'user' : 'environment')
+      setCameraId('')
+    }
+    if (cameraOn) {
+      setCameraOn(false)
+      setTimeout(() => setCameraOn(true), 120)
+    }
+  }
 
   function handleLookup(raw) {
     const novaId = parseNovaId(raw)
@@ -117,8 +219,21 @@ export default function NovaIdScannerAdmin({ league, run, busy }) {
 
       <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
         <div className="panel space-y-4 p-5">
-          <button className="button min-h-16 w-full text-base" onClick={() => setCameraOn(!cameraOn)}><Camera size={20} />{cameraOn ? 'Detener cámara' : 'Escanear QR'}</button>
-          {cameraOn && <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full rounded-lg border border-gold/30 bg-black object-cover" />}
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <button className="button min-h-16 w-full text-base" onClick={() => setCameraOn(!cameraOn)}><Camera size={20} />{cameraOn ? 'Detener cámara' : 'Escanear jugador'}</button>
+            <button className="button-secondary min-h-16" onClick={switchCamera}>Cambiar cámara</button>
+          </div>
+          {cameraOn && (
+            <div className="relative overflow-hidden rounded-lg border border-gold/30 bg-black">
+              <video ref={videoRef} autoPlay muted playsInline className={scannerEngine === 'native' ? 'aspect-video w-full object-cover' : 'hidden'} />
+              <div id={scannerId} className={scannerEngine === 'html5' ? 'min-h-[260px] [&_video]:rounded-lg [&_video]:object-cover' : 'hidden'} />
+              <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                <div className="h-44 w-44 rounded-2xl border-2 border-gold shadow-gold" />
+              </div>
+              <p className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/70 px-3 py-2 text-center text-sm font-bold text-gold">Coloca el QR dentro del cuadro</p>
+              {verified && <div className="absolute inset-0 grid place-items-center bg-emerald-500/20 backdrop-blur-sm"><p className="rounded-lg bg-black px-4 py-3 text-xl font-black text-emerald-200">NOVA ID VERIFIED ✅</p></div>}
+            </div>
+          )}
           {cameraError && <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">{cameraError}</p>}
           <div className="rounded-lg border border-white/10 bg-white/5 p-3">
             <p className="text-sm font-bold">Respaldo manual</p>
