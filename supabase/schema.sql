@@ -141,9 +141,38 @@ create table public.match_events (
   match_id uuid not null references public.matches(id) on delete cascade,
   team_id uuid not null references public.teams(id) on delete cascade,
   player_id uuid references public.players(id) on delete set null,
-  type text not null check (type in ('goal', 'assist')),
+  related_player_id uuid references public.players(id) on delete set null,
+  type text not null check (type in ('goal', 'assist', 'yellow_card', 'red_card', 'substitution', 'injury', 'mvp', 'observation')),
+  event_type text,
   minute int not null check (minute >= 0 and minute <= 130),
+  detail text,
   created_at timestamptz not null default now()
+);
+
+create table public.match_lineups (
+  id uuid primary key default gen_random_uuid(),
+  match_id uuid not null references public.matches(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  player_id uuid not null references public.players(id) on delete cascade,
+  is_starter boolean not null default true,
+  is_present boolean not null default true,
+  captain boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (match_id, player_id)
+);
+
+create table public.match_reports (
+  id uuid primary key default gen_random_uuid(),
+  match_id uuid not null references public.matches(id) on delete cascade,
+  referee_name text,
+  observations text,
+  home_captain_signature text,
+  away_captain_signature text,
+  referee_signature text,
+  pdf_url text,
+  status text not null default 'draft' check (status in ('draft', 'finalized')),
+  created_at timestamptz not null default now(),
+  unique (match_id)
 );
 
 create table public.goals (
@@ -313,6 +342,8 @@ alter table public.season_history enable row level security;
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.match_events enable row level security;
+alter table public.match_lineups enable row level security;
+alter table public.match_reports enable row level security;
 alter table public.goals enable row level security;
 alter table public.match_cards enable row level security;
 alter table public.sanctions enable row level security;
@@ -337,6 +368,8 @@ create policy "public read teams" on public.teams for select using (true);
 create policy "public read approved players" on public.players for select using (approval_status = 'approved' or auth_user_id = auth.uid() or public.is_admin());
 create policy "public read matches" on public.matches for select using (true);
 create policy "public read match events" on public.match_events for select using (true);
+create policy "public read match lineups" on public.match_lineups for select using (true);
+create policy "public read match reports" on public.match_reports for select using (true);
 create policy "public read goals" on public.goals for select using (true);
 create policy "public read match cards" on public.match_cards for select using (true);
 create policy "public read sanctions" on public.sanctions for select using (true);
@@ -358,6 +391,8 @@ create policy "admin write teams" on public.teams for all using (public.is_admin
 create policy "admin write players" on public.players for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write matches" on public.matches for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write match events" on public.match_events for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write match lineups" on public.match_lineups for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write match reports" on public.match_reports for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write goals" on public.goals for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write match cards" on public.match_cards for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write sanctions" on public.sanctions for all using (public.is_admin()) with check (public.is_admin());
@@ -401,6 +436,8 @@ alter publication supabase_realtime add table public.teams;
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;
 alter publication supabase_realtime add table public.match_events;
+alter publication supabase_realtime add table public.match_lineups;
+alter publication supabase_realtime add table public.match_reports;
 alter publication supabase_realtime add table public.goals;
 alter publication supabase_realtime add table public.match_cards;
 alter publication supabase_realtime add table public.sanctions;

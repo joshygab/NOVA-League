@@ -410,3 +410,110 @@ export async function savePlayoffSetting({ division_id, is_active }) {
     status: is_active ? 'active' : 'coming_soon',
   }, { onConflict: 'division_id' }).select().single()
 }
+
+export async function saveMatchLineups({ match, presentPlayers, captains }) {
+  const rows = presentPlayers.map((player) => ({
+    match_id: match.id,
+    team_id: player.team_id,
+    player_id: player.id,
+    is_starter: true,
+    is_present: true,
+    captain: captains[player.team_id] === player.id,
+  }))
+  await supabase.from('match_lineups').delete().eq('match_id', match.id)
+  if (!rows.length) return { error: { message: 'Selecciona jugadores presentes.' } }
+  return supabase.from('match_lineups').insert(rows)
+}
+
+export async function saveMatchReport(form) {
+  return supabase.from('match_reports').upsert({
+    id: form.id || undefined,
+    match_id: form.match_id,
+    referee_name: form.referee_name || null,
+    observations: form.observations || null,
+    home_captain_signature: form.home_captain_signature || null,
+    away_captain_signature: form.away_captain_signature || null,
+    referee_signature: form.referee_signature || null,
+    pdf_url: form.pdf_url || null,
+    status: form.status || 'draft',
+  }, { onConflict: 'match_id' }).select().single()
+}
+
+export async function saveDigitalMatchEvent(form) {
+  const base = {
+    division_id: form.division_id || null,
+    match_id: form.match_id,
+    team_id: form.team_id,
+    player_id: form.player_id || null,
+    related_player_id: form.related_player_id || null,
+    type: form.event_type,
+    event_type: form.event_type,
+    minute: form.minute ? Number(form.minute) : 0,
+    detail: form.detail || null,
+  }
+
+  const eventResult = await supabase.from('match_events').insert(base).select().single()
+  if (eventResult.error) return eventResult
+
+  if (form.event_type === 'goal') {
+    const goalResult = await saveGoal({
+      division_id: form.division_id,
+      match_id: form.match_id,
+      team_id: form.team_id,
+      player_id: form.player_id,
+      minute: form.minute || 0,
+      goal_type: form.goal_type || 'open_play',
+      assist_player_id: form.related_player_id || '',
+    })
+    if (goalResult.error) return goalResult
+  }
+
+  if (form.event_type === 'assist') {
+    const assistResult = await saveEvent({
+      division_id: form.division_id,
+      match_id: form.match_id,
+      team_id: form.team_id,
+      player_id: form.player_id,
+      type: 'assist',
+      minute: form.minute || 0,
+    })
+    if (assistResult.error) return assistResult
+  }
+
+  if (form.event_type === 'yellow_card' || form.event_type === 'red_card') {
+    const cardResult = await saveCard({
+      division_id: form.division_id,
+      match_id: form.match_id,
+      team_id: form.team_id,
+      player_id: form.player_id,
+      type: form.event_type === 'yellow_card' ? 'yellow' : 'red',
+      minute: form.minute || 0,
+      reason: form.detail || '',
+    })
+    if (cardResult.error) return cardResult
+  }
+
+  if (form.event_type === 'mvp') {
+    const matchResult = await supabase.from('matches').update({ mvp_player_id: form.player_id }).eq('id', form.match_id)
+    if (matchResult.error) return matchResult
+  }
+
+  return eventResult
+}
+
+export async function finalizeDigitalMatch({ match, report, score }) {
+  const matchResult = await supabase.from('matches').update({
+    home_score: Number(score.home),
+    away_score: Number(score.away),
+    status: 'played',
+    venue: report.venue || match.venue || null,
+    observations: report.observations || match.observations || null,
+  }).eq('id', match.id)
+  if (matchResult.error) return matchResult
+
+  return saveMatchReport({
+    ...report,
+    match_id: match.id,
+    status: 'finalized',
+  })
+}

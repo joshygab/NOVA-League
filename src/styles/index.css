@@ -33,6 +33,25 @@
   }
 }
 
+.print-only {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+}
+
 @layer components {
   .glass {
     @apply border border-white/10 bg-white/[0.045] shadow-glow backdrop-blur-xl;
