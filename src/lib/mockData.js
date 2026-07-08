@@ -5,6 +5,15 @@ export const mockTeams = [
   { id: '4', name: 'Titanes FC', city: 'Querétaro', crest_url: '', founded: 2021, captain: 'Bruno Vega', category: 'Libre', season: '2026' },
 ]
 
+export const mockLeagueSettings = {
+  id: 1,
+  name: 'Liga Pro Futbol',
+  short_name: 'LP',
+  tagline: 'Fútbol competitivo',
+  description: 'Resultados, tabla, estadísticas, noticias y administración profesional para una liga moderna.',
+  logo_url: '',
+}
+
 export const mockPlayers = [
   { id: '1', team_id: '1', name: 'Mateo Salas', position: 'Delantero', number: 9, age: 25, photo_url: '' },
   { id: '2', team_id: '2', name: 'Luis Herrera', position: 'Medio', number: 10, age: 27, photo_url: '' },

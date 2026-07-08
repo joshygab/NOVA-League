@@ -17,6 +17,21 @@ export async function saveTeam(form) {
   return supabase.from('teams').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
 }
 
+export async function saveLeagueSettings(form) {
+  const payload = {
+    id: 1,
+    name: form.name,
+    short_name: form.short_name,
+    tagline: form.tagline,
+    description: form.description,
+    logo_url: form.logo_url || null,
+  }
+  if (form.logoFile) {
+    payload.logo_url = await uploadPublicFile('league-assets', `${crypto.randomUUID()}-${form.logoFile.name}`, form.logoFile)
+  }
+  return supabase.from('league_settings').upsert(payload).select().single()
+}
+
 export async function savePlayer(form) {
   const payload = {
     team_id: form.team_id,

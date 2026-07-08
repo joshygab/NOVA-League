@@ -1,7 +1,7 @@
 import { supabase, hasSupabaseConfig } from './supabase'
-import { mockCards, mockEvents, mockGallery, mockGoals, mockMatches, mockNews, mockPlayers, mockPlayoffMatches, mockSanctions, mockTeams } from './mockData'
+import { mockCards, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockPlayers, mockPlayoffMatches, mockSanctions, mockTeams } from './mockData'
 
-const tables = ['teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery']
+const tables = ['league_settings', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'sanctions', 'playoff_matches', 'news', 'gallery']
 
 export async function fetchLeagueData() {
   if (!hasSupabaseConfig) {
@@ -16,10 +16,12 @@ export async function fetchLeagueData() {
       playoffMatches: mockPlayoffMatches,
       news: mockNews,
       gallery: mockGallery,
+      settings: mockLeagueSettings,
     }
   }
 
-  const [teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery] = await Promise.all([
+  const [settings, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery] = await Promise.all([
+    supabase.from('league_settings').select('*').eq('id', 1).maybeSingle(),
     supabase.from('teams').select('*').order('name'),
     supabase.from('players').select('*').order('name'),
     supabase.from('matches').select('*').order('match_date'),
@@ -32,7 +34,7 @@ export async function fetchLeagueData() {
     supabase.from('gallery').select('*').order('created_at', { ascending: false }),
   ])
 
-  const error = [teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery].find((result) => result.error)?.error
+  const error = [settings, teams, players, matches, goals, events, cards, sanctions, playoffMatches, news, gallery].find((result) => result.error)?.error
   if (error) throw error
 
   return {
@@ -46,6 +48,7 @@ export async function fetchLeagueData() {
     playoffMatches: playoffMatches.data ?? [],
     news: news.data ?? [],
     gallery: gallery.data ?? [],
+    settings: settings.data ?? mockLeagueSettings,
   }
 }
 

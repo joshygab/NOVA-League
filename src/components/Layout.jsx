@@ -14,15 +14,24 @@ const nav = [
 ]
 
 export default function Layout({ league }) {
+  const settings = league.settings || {}
+  const shortName = settings.short_name || 'LP'
+  const leagueName = settings.name || 'Liga Pro'
+  const tagline = settings.tagline || 'Fútbol competitivo'
+
   return (
     <div className="min-h-screen pb-24 md:pb-0">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-ink/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <NavLink to="/" className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-electric text-xl font-black shadow-glow">LP</span>
+            {settings.logo_url ? (
+              <img src={settings.logo_url} alt={leagueName} className="h-10 w-10 rounded-lg object-cover ring-1 ring-white/10" />
+            ) : (
+              <span className="grid h-10 w-10 place-items-center rounded-lg bg-electric text-xl font-black shadow-glow">{shortName}</span>
+            )}
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.24em] text-white">Liga Pro</p>
-              <p className="text-xs text-slate-400">Fútbol competitivo</p>
+              <p className="text-sm font-black uppercase tracking-[0.24em] text-white">{leagueName}</p>
+              <p className="text-xs text-slate-400">{tagline}</p>
             </div>
           </NavLink>
           <nav className="hidden items-center gap-1 md:flex">

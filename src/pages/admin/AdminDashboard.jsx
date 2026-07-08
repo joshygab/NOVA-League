@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { LogOut, RefreshCcw, Save, Trash2 } from 'lucide-react'
-import { deleteRecord, generateSemifinals, saveCard, saveEvent, saveGoal, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
+import { deleteRecord, generateSemifinals, saveCard, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, savePlayer, savePlayoffMatch, saveSanction, saveTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig, supabase } from '../../lib/supabase'
 import PageTitle from '../../components/PageTitle'
 import PlayoffBracket from '../../components/PlayoffBracket'
@@ -8,6 +8,7 @@ import StandingsTable from '../../components/StandingsTable'
 import { goalTypes, playoffStageLabel } from '../../lib/labels'
 
 const emptyTeam = { name: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
+const emptyLeagueSettings = { name: '', short_name: '', tagline: '', description: '', logo_url: '', logoFile: null }
 const emptyPlayer = { team_id: '', name: '', position: '', number: '', age: '', photo_url: '', photoFile: null }
 const emptyMatch = { round: 1, match_date: '', venue: '', home_team_id: '', away_team_id: '', home_score: '', away_score: '', status: 'scheduled', mvp_player_id: '', observations: '' }
 const emptyEvent = { match_id: '', team_id: '', player_id: '', type: 'goal', minute: '' }
@@ -48,13 +49,14 @@ export default function AdminDashboard({ league }) {
         </PageTitle>
 
         <div className="mb-6 flex flex-wrap gap-2">
-          {['equipos', 'jugadores', 'partidos', 'estadísticas de jugadores', 'playoffs', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
+          {['liga', 'equipos', 'jugadores', 'partidos', 'estadísticas de jugadores', 'playoffs', 'eventos', 'tarjetas', 'sanciones', 'noticias', 'tabla'].map((item) => (
             <button key={item} onClick={() => setTab(item)} className={tab === item ? 'button' : 'button-secondary'}>{item}</button>
           ))}
         </div>
 
         {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
+        {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
         {tab === 'equipos' && <TeamForm busy={busy} run={run} teams={league.teams} />}
         {tab === 'jugadores' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos' && <MatchForm busy={busy} run={run} league={league} />}
@@ -68,6 +70,21 @@ export default function AdminDashboard({ league }) {
       </div>
     </main>
   )
+}
+
+function LeagueSettingsForm({ run, busy, settings }) {
+  const [form, setForm] = useState({ ...emptyLeagueSettings, ...(settings || {}) })
+
+  return <AdminGrid title="Configuración de la liga" list={['Nombre público', 'Logo', 'Texto principal']}>
+    <Field label="Nombre de la liga" value={form.name || ''} onChange={(name) => setForm({ ...form, name })} />
+    <Field label="Iniciales / nombre corto" value={form.short_name || ''} onChange={(short_name) => setForm({ ...form, short_name })} />
+    <Field label="Subtítulo" value={form.tagline || ''} onChange={(tagline) => setForm({ ...form, tagline })} />
+    <label className="block text-sm font-bold">Descripción de portada</label>
+    <textarea className="input min-h-28" value={form.description || ''} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+    <FileField label="Logo de la liga" onChange={(logoFile) => setForm({ ...form, logoFile })} />
+    {form.logo_url && <img src={form.logo_url} alt={form.name} className="h-20 w-20 rounded-lg object-cover ring-1 ring-white/10" />}
+    <SaveButton busy={busy} onClick={() => run(() => saveLeagueSettings(form), 'Configuración de liga actualizada')} />
+  </AdminGrid>
 }
 
 function TeamForm({ run, busy, teams }) {

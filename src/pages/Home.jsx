@@ -7,6 +7,7 @@ import StandingsTable from '../components/StandingsTable'
 
 export default function Home({ league }) {
   const nextMatches = league.matches.slice(0, 2)
+  const settings = league.settings || {}
 
   return (
     <div className="space-y-8">
@@ -15,9 +16,10 @@ export default function Home({ league }) {
           <p className="mb-4 inline-flex items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-black uppercase tracking-[0.24em] text-gold">
             <Radio size={14} /> En vivo con Realtime
           </p>
-          <h1 className="max-w-3xl text-4xl font-black tracking-normal text-white md:text-7xl">Liga Pro Futbol</h1>
+          {settings.logo_url && <img src={settings.logo_url} alt={settings.name} className="mb-5 h-20 w-20 rounded-lg object-cover ring-1 ring-white/20" />}
+          <h1 className="max-w-3xl text-4xl font-black tracking-normal text-white md:text-7xl">{settings.name || 'Liga Pro Futbol'}</h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-200">
-            Resultados, tabla, estadísticas, noticias y administración profesional para una liga moderna.
+            {settings.description || 'Resultados, tabla, estadísticas, noticias y administración profesional para una liga moderna.'}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/tabla" className="button">Ver tabla <ArrowRight size={18} /></Link>

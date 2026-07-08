@@ -1,5 +1,19 @@
 create extension if not exists "pgcrypto";
 
+create table public.league_settings (
+  id int primary key default 1 check (id = 1),
+  name text not null default 'Liga Pro Futbol',
+  short_name text not null default 'LP',
+  tagline text default 'Fútbol competitivo',
+  description text default 'Resultados, tabla, estadísticas, noticias y administración profesional para una liga moderna.',
+  logo_url text,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.league_settings (id)
+values (1)
+on conflict (id) do nothing;
+
 create table public.teams (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -122,6 +136,7 @@ create table public.gallery (
 );
 
 alter table public.teams enable row level security;
+alter table public.league_settings enable row level security;
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.match_events enable row level security;
@@ -132,6 +147,7 @@ alter table public.playoff_matches enable row level security;
 alter table public.news enable row level security;
 alter table public.gallery enable row level security;
 
+create policy "public read league settings" on public.league_settings for select using (true);
 create policy "public read teams" on public.teams for select using (true);
 create policy "public read players" on public.players for select using (true);
 create policy "public read matches" on public.matches for select using (true);
@@ -143,6 +159,7 @@ create policy "public read playoff matches" on public.playoff_matches for select
 create policy "public read news" on public.news for select using (true);
 create policy "public read gallery" on public.gallery for select using (true);
 
+create policy "admin write league settings" on public.league_settings for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "admin write teams" on public.teams for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "admin write players" on public.players for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "admin write matches" on public.matches for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -156,22 +173,26 @@ create policy "admin write gallery" on public.gallery for all using (auth.role()
 
 insert into storage.buckets (id, name, public)
 values
+  ('league-assets', 'league-assets', true),
   ('team-crests', 'team-crests', true),
   ('player-photos', 'player-photos', true),
   ('news-covers', 'news-covers', true),
   ('gallery', 'gallery', true)
 on conflict (id) do nothing;
 
+create policy "public read league assets" on storage.objects for select using (bucket_id = 'league-assets');
 create policy "public read team crests" on storage.objects for select using (bucket_id = 'team-crests');
 create policy "public read player photos" on storage.objects for select using (bucket_id = 'player-photos');
 create policy "public read news covers" on storage.objects for select using (bucket_id = 'news-covers');
 create policy "public read gallery images" on storage.objects for select using (bucket_id = 'gallery');
 
+create policy "admin upload league assets" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'league-assets') with check (auth.role() = 'authenticated' and bucket_id = 'league-assets');
 create policy "admin upload team crests" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'team-crests') with check (auth.role() = 'authenticated' and bucket_id = 'team-crests');
 create policy "admin upload player photos" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'player-photos') with check (auth.role() = 'authenticated' and bucket_id = 'player-photos');
 create policy "admin upload news covers" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'news-covers') with check (auth.role() = 'authenticated' and bucket_id = 'news-covers');
 create policy "admin upload gallery images" on storage.objects for all using (auth.role() = 'authenticated' and bucket_id = 'gallery') with check (auth.role() = 'authenticated' and bucket_id = 'gallery');
 
+alter publication supabase_realtime add table public.league_settings;
 alter publication supabase_realtime add table public.teams;
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;
