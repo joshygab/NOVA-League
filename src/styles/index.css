@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    background:
+      radial-gradient(circle at top left, rgba(11, 140, 255, 0.16), transparent 34rem),
+      linear-gradient(135deg, #05070c 0%, #0b101a 48%, #05070c 100%);
+    color: #f8fafc;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply border border-white/10 bg-white/[0.045] shadow-glow backdrop-blur-xl;
+  }
+
+  .panel {
+    @apply rounded-lg border border-white/10 bg-panel/90 shadow-glow;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-ink/70 px-3 py-2 text-sm text-white outline-none transition focus:border-electric;
+  }
+
+  .button {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-electric px-4 py-2 text-sm font-bold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:border-gold/70 hover:text-gold;
+  }
+}
