@@ -35,10 +35,20 @@ export default function Home({ league }) {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
+      <section className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
         <div>
-          <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><ShieldCheck className="text-electric" /> Tabla general</div>
-          <StandingsTable standings={league.standings.slice(0, 5)} />
+          <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><ShieldCheck className="text-electric" /> Clasificación por división</div>
+          <div className="space-y-5">
+            {league.divisionTables.map((division) => (
+              <section key={division.id}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-xl font-black">{division.name}</h2>
+                  <Link to={`/tabla?division=${division.slug || division.id}`} className="button-secondary min-h-9 px-3 py-1 text-xs">Ver completa</Link>
+                </div>
+                <StandingsTable standings={division.standings.slice(0, 5)} compact />
+              </section>
+            ))}
+          </div>
         </div>
         <div>
           <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Sparkles className="text-gold" /> Próximos partidos</div>

@@ -1,11 +1,11 @@
 import Crest from './Crest'
 import Badge from './Badge'
 
-export default function StandingsTable({ standings }) {
+export default function StandingsTable({ standings, compact = false }) {
   return (
     <div className="panel overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-sm">
+        <table className={`w-full text-left text-sm ${compact ? 'min-w-[680px]' : 'min-w-[760px]'}`}>
           <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-slate-400">
             <tr>
               <th className="px-4 py-4">#</th>
@@ -18,7 +18,7 @@ export default function StandingsTable({ standings }) {
               <th className="px-3 py-4 text-center">GC</th>
               <th className="px-3 py-4 text-center">DG</th>
               <th className="px-3 py-4 text-center text-gold">PTS</th>
-              <th className="px-4 py-4">Zona</th>
+              {!compact && <th className="px-4 py-4">Zona</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
@@ -44,7 +44,7 @@ export default function StandingsTable({ standings }) {
                 <Cell>{team.goalsAgainst}</Cell>
                 <Cell>{team.goalDifference}</Cell>
                 <Cell strong>{team.points}</Cell>
-                <td className="px-4 py-4">{semifinalist && <Badge tone="gold">SEMIFINALES</Badge>}</td>
+                {!compact && <td className="px-4 py-4">{semifinalist && <Badge tone="gold">SEMIFINALES</Badge>}</td>}
               </tr>
             )})}
           </tbody>
