@@ -606,6 +606,7 @@ export async function saveNews(form) {
     title: form.title,
     excerpt: form.excerpt,
     body: form.body,
+    category: form.category || 'noticia',
     cover_url: form.cover_url || null,
     published_at: form.published_at || new Date().toISOString(),
   }
@@ -614,6 +615,36 @@ export async function saveNews(form) {
   }
   const result = await supabase.from('news').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
   return auditResult(result, { action: form.id ? 'update' : 'create', module: 'media', entityTable: 'news', previousValue: previous })
+}
+
+export async function saveFinanceEntry(form) {
+  const previous = await readRecord('finance_entries', form.id)
+  const result = await supabase.from('finance_entries').upsert({
+    id: form.id || undefined,
+    team_id: form.team_id || null,
+    entry_type: form.entry_type || 'charge',
+    concept: form.concept,
+    amount: Number(form.amount || 0),
+    status: form.status || 'pending',
+    due_date: form.due_date || null,
+    paid_at: form.paid_at || null,
+    notes: form.notes || null,
+  }).select().single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'finance', entityTable: 'finance_entries', previousValue: previous })
+}
+
+export async function saveNotification(form) {
+  const result = await supabase.from('notifications').insert({
+    title: form.title,
+    body: form.body,
+    notification_type: form.notification_type || 'general',
+    audience: form.audience || 'public',
+    team_id: form.team_id || null,
+    publish_at: form.publish_at || new Date().toISOString(),
+    requires_ack: Boolean(form.requires_ack),
+    status: form.status || 'published',
+  }).select().single()
+  return auditResult(result, { action: 'create', module: 'media', entityTable: 'notifications' })
 }
 
 export async function saveNovaChampionsSettings(form) {
@@ -763,6 +794,19 @@ export async function saveNovaChampionsStat(form) {
     value: Number(form.value || 1),
   }).select().single()
   return auditResult(result, { action: 'create', module: 'nova_champions_stats', entityTable: 'nova_champions_stats' })
+}
+
+export async function saveNovaChampionsHistory(form) {
+  const result = await supabase.from('nova_champions_champions_history').insert({
+    season_id: form.season_id || new Date().getFullYear().toString(),
+    champion_team_id: form.champion_team_id,
+    runner_up_team_id: form.runner_up_team_id || null,
+    final_score: form.final_score || null,
+    final_mvp_player_id: form.final_mvp_player_id || null,
+    top_scorer_player_id: form.top_scorer_player_id || null,
+    best_goalkeeper_player_id: form.best_goalkeeper_player_id || null,
+  }).select().single()
+  return auditResult(result, { action: 'publish_champion', module: 'nova_champions', entityTable: 'nova_champions_champions_history' })
 }
 
 export async function savePlayoffSetting({ division_id, is_active }) {

@@ -15,6 +15,7 @@ export default function NovaChampionsPage({ league }) {
   const final = (cup.matches || []).find((match) => match.round === 'final')
   const champion = final?.winner_team_id ? league.teamsById.get(final.winner_team_id) : null
   const cupStats = useMemo(() => buildCupStats(cup.stats || [], league), [cup.stats, league])
+  const records = useMemo(() => buildCupRecords(cup, league, cupStats), [cup, league, cupStats])
 
   if (!active) return (
     <PremiumComingSoon
@@ -49,18 +50,21 @@ export default function NovaChampionsPage({ league }) {
         ].map(([id, label]) => <button key={id} className={tab === id ? 'button whitespace-nowrap' : 'button-secondary whitespace-nowrap'} onClick={() => setTab(id)}>{label}</button>)}
       </nav>
 
-      {tab === 'inicio' && <ChampionsHome champion={champion} qualified={qualified} league={league} stats={cupStats} />}
+      {tab === 'inicio' && <ChampionsHome champion={champion} qualified={qualified} league={league} stats={cupStats} matches={cup.matches || []} records={records} />}
       {tab === 'bracket' && <NovaChampionsBracket matches={cup.matches || []} teamsById={league.teamsById} />}
       {tab === 'partidos' && <ChampionsMatches matches={cup.matches || []} league={league} />}
       {tab === 'estadisticas' && <ChampionsStats stats={cupStats} />}
-      {tab === 'historia' && <ChampionsHistory history={cup.history || []} league={league} />}
+      {tab === 'historia' && <ChampionsHistory history={cup.history || []} league={league} records={records} />}
     </div>
   )
 }
 
-function ChampionsHome({ champion, qualified, league, stats }) {
+function ChampionsHome({ champion, qualified, league, stats, matches, records }) {
+  const final = matches.find((match) => match.round === 'final')
+  const pots = buildPots(qualified, league)
   return (
     <section className="space-y-6">
+      {final && <ChampionsFinal match={final} league={league} />}
       <div className="grid gap-4 md:grid-cols-3">
         <HeroStat icon={Trophy} label="Campeón actual" value={champion?.name || 'Por definir'} />
         <HeroStat icon={Star} label="Jugador del torneo" value={stats.mvps[0]?.name || 'Por definir'} />
@@ -79,6 +83,11 @@ function ChampionsHome({ champion, qualified, league, stats }) {
           {qualified.length === 0 && <p className="text-sm text-slate-400">Aún no hay equipos clasificados.</p>}
         </div>
       </section>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <PotsView pots={pots} league={league} />
+        <GroupPreview teams={qualified} league={league} />
+      </section>
+      <ChampionsRecords records={records} />
     </section>
   )
 }
@@ -100,7 +109,7 @@ function StatList({ title, rows }) {
 }
 
 function ChampionsHistory({ history, league }) {
-  return <section className="space-y-3">{history.length ? history.map((item) => <article key={item.id} className="rounded-lg border border-gold/20 bg-black/80 p-5"><p className="text-gold">{item.season_id}</p><h3 className="text-2xl font-black">🏆 {league.teamsById.get(item.champion_team_id)?.name || 'Campeón'}</h3><p className="text-sm text-slate-400">Final: {item.final_score || 'Por registrar'}</p></article>) : <p className="rounded-lg border border-white/10 bg-black/70 p-5 text-slate-400">El museo de campeones se llenará al publicar la primera final.</p>}</section>
+  return <section className="space-y-6"><div className="space-y-3">{history.length ? history.map((item) => <article key={item.id} className="rounded-lg border border-gold/20 bg-black/80 p-5"><p className="text-gold">{item.season_id}</p><h3 className="text-2xl font-black">🏆 {league.teamsById.get(item.champion_team_id)?.name || 'Campeón'}</h3><p className="text-sm text-slate-400">Final: {item.final_score || 'Por registrar'}</p></article>) : <p className="rounded-lg border border-white/10 bg-black/70 p-5 text-slate-400">El museo de campeones se llenará al publicar la primera final.</p>}</div><ChampionsRecords records={records} /></section>
 }
 
 function buildCupStats(stats, league) {
@@ -111,4 +120,73 @@ function buildCupStats(stats, league) {
     groups[bucket][row.player_id] = (groups[bucket][row.player_id] || 0) + Number(row.value || 1)
   })
   return Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, Object.entries(value).map(([id, total]) => ({ id, name: league.playersById.get(id)?.name || 'Jugador', value: total })).sort((a, b) => b.value - a.value)]))
+}
+
+function ChampionsFinal({ match, league }) {
+  const home = league.teamsById.get(match.home_team_id)
+  const away = league.teamsById.get(match.away_team_id)
+  const countdown = match.match_date ? daysUntil(match.match_date) : null
+  return (
+    <section className="rounded-lg border border-gold/40 bg-black p-6 text-center shadow-gold">
+      <p className="text-xs font-black uppercase tracking-[0.24em] text-gold">Gran Final</p>
+      <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <FinalTeam team={home} />
+        <div>
+          <Trophy className="mx-auto text-gold" size={40} />
+          <p className="mt-2 text-2xl font-black">VS</p>
+          {countdown != null && <p className="mt-1 text-xs text-slate-400">{countdown > 0 ? `Faltan ${countdown} días` : 'Hoy se juega la final'}</p>}
+        </div>
+        <FinalTeam team={away} />
+      </div>
+    </section>
+  )
+}
+
+function FinalTeam({ team }) {
+  return <div className="min-w-0"><Crest src={team?.crest_url} name={team?.name} size="lg" /><p className="mt-2 truncate text-lg font-black">{team?.name || 'Por definir'}</p></div>
+}
+
+function PotsView({ pots, league }) {
+  return <section className="rounded-lg border border-gold/20 bg-black/80 p-5"><h2 className="text-xl font-black">Bombos</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{pots.map((pot) => <div key={pot.name} className="rounded-lg bg-white/5 p-3"><p className="font-black text-gold">{pot.name}</p>{pot.teams.map((team) => <p key={team.id} className="mt-2 text-sm">{team.name} · {league.divisionsById.get(team.division_id)?.name || 'División'}</p>)}</div>)}</div></section>
+}
+
+function GroupPreview({ teams, league }) {
+  const groups = ['A', 'B', 'C', 'D'].map((name, index) => ({ name, teams: teams.filter((_, teamIndex) => teamIndex % 4 === index) }))
+  return <section className="rounded-lg border border-gold/20 bg-black/80 p-5"><h2 className="text-xl font-black">Fase de grupos</h2><p className="mt-1 text-sm text-slate-400">Vista preparada para cuando la copa use grupos.</p><div className="mt-4 grid gap-3 sm:grid-cols-2">{groups.map((group) => <div key={group.name} className="rounded-lg bg-white/5 p-3"><p className="font-black text-gold">Grupo {group.name}</p>{group.teams.map((team) => <p key={team.id} className="mt-2 text-sm">{team.name} · {league.divisionsById.get(team.division_id)?.name || 'División'}</p>)}</div>)}</div></section>
+}
+
+function ChampionsRecords({ records }) {
+  return <section className="rounded-lg border border-gold/20 bg-black/80 p-5"><h2 className="text-xl font-black">Récords Champions</h2><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{records.map((record) => <div key={record.label} className="rounded-lg bg-white/5 p-3"><p className="text-xs font-black uppercase tracking-[0.16em] text-gold">{record.label}</p><p className="mt-2 text-lg font-black">{record.value}</p></div>)}</div></section>
+}
+
+function buildPots(teams, league) {
+  const sorted = [...teams].sort((a, b) => {
+    const aStanding = league.standings.find((row) => row.id === a.id)
+    const bStanding = league.standings.find((row) => row.id === b.id)
+    return (aStanding?.position || 999) - (bStanding?.position || 999)
+  })
+  return [
+    { name: 'Bombo 1', teams: sorted.slice(0, Math.ceil(sorted.length / 2)) },
+    { name: 'Bombo 2', teams: sorted.slice(Math.ceil(sorted.length / 2)) },
+  ]
+}
+
+function buildCupRecords(cup, league, stats) {
+  const matches = cup.matches || []
+  const biggest = [...matches].filter((match) => match.home_score != null && match.away_score != null).sort((a, b) => Math.abs((b.home_score || 0) - (b.away_score || 0)) - Math.abs((a.home_score || 0) - (a.away_score || 0)))[0]
+  const titles = {}
+  ;(cup.history || []).forEach((item) => { titles[item.champion_team_id] = (titles[item.champion_team_id] || 0) + 1 })
+  const topTitle = Object.entries(titles).sort((a, b) => b[1] - a[1])[0]
+  return [
+    { label: 'Máximo goleador histórico', value: stats.goals[0] ? `${stats.goals[0].name} · ${stats.goals[0].value}` : 'Por definir' },
+    { label: 'Equipo con más títulos', value: topTitle ? `${league.teamsById.get(topTitle[0])?.name || 'Equipo'} · ${topTitle[1]}` : 'Por definir' },
+    { label: 'Jugador con más MVP', value: stats.mvps[0] ? `${stats.mvps[0].name} · ${stats.mvps[0].value}` : 'Por definir' },
+    { label: 'Mayor goleada', value: biggest ? `${league.teamsById.get(biggest.home_team_id)?.name || 'Local'} ${biggest.home_score}-${biggest.away_score} ${league.teamsById.get(biggest.away_team_id)?.name || 'Visitante'}` : 'Por definir' },
+    { label: 'Partidos jugados', value: matches.filter((match) => ['played', 'finalized'].includes(match.status)).length },
+    { label: 'Equipos clasificados', value: (cup.qualifiedTeams || []).length },
+  ]
+}
+
+function daysUntil(value) {
+  return Math.max(0, Math.ceil((new Date(value) - new Date()) / 86400000))
 }

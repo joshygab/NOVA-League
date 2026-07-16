@@ -423,6 +423,33 @@ create table public.roster_movements (
   created_at timestamptz not null default now()
 );
 
+create table public.finance_entries (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid references public.teams(id) on delete set null,
+  entry_type text not null default 'charge' check (entry_type in ('charge', 'payment', 'expense')),
+  concept text not null,
+  amount numeric(12,2) not null default 0,
+  status text not null default 'pending' check (status in ('pending', 'paid', 'overdue', 'cancelled')),
+  due_date date,
+  paid_at date,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  notification_type text not null default 'general',
+  audience text not null default 'public' check (audience in ('public', 'teams', 'captains', 'admins')),
+  team_id uuid references public.teams(id) on delete set null,
+  publish_at timestamptz not null default now(),
+  requires_ack boolean not null default false,
+  status text not null default 'published' check (status in ('draft', 'published', 'archived')),
+  created_at timestamptz not null default now()
+);
+
 create table public.goals (
   id uuid primary key default gen_random_uuid(),
   division_id uuid references public.divisions(id) on delete restrict,
@@ -503,6 +530,7 @@ create table public.news (
   title text not null,
   excerpt text,
   body text,
+  category text not null default 'noticia',
   cover_url text,
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now()
@@ -534,6 +562,8 @@ create table public.nova_champions_qualified_teams (
   team_id uuid not null references public.teams(id) on delete cascade,
   season_id text not null,
   qualification_method text not null default 'manual',
+  pot int,
+  group_name text,
   created_at timestamptz not null default now(),
   unique (team_id, season_id)
 );
@@ -550,6 +580,7 @@ create table public.nova_champions_matches (
   home_penalties int,
   away_penalties int,
   winner_team_id uuid references public.teams(id) on delete set null,
+  group_name text,
   status text not null default 'scheduled' check (status in ('scheduled', 'played', 'finalized')),
   match_date timestamptz,
   venue text,
@@ -637,6 +668,8 @@ alter table public.achievements enable row level security;
 alter table public.player_achievements enable row level security;
 alter table public.team_of_week enable row level security;
 alter table public.roster_movements enable row level security;
+alter table public.finance_entries enable row level security;
+alter table public.notifications enable row level security;
 alter table public.goals enable row level security;
 alter table public.match_cards enable row level security;
 alter table public.sanctions enable row level security;
@@ -680,6 +713,7 @@ create policy "public read player ratings" on public.player_ratings for select u
 create policy "public read achievements" on public.achievements for select using (true);
 create policy "public read player achievements" on public.player_achievements for select using (true);
 create policy "public read team of week" on public.team_of_week for select using (true);
+create policy "public read published notifications" on public.notifications for select using (status = 'published' and audience = 'public');
 create policy "public read goals" on public.goals for select using (true);
 create policy "public read match cards" on public.match_cards for select using (true);
 create policy "public read sanctions" on public.sanctions for select using (true);
@@ -723,6 +757,8 @@ create policy "admin write player achievements" on public.player_achievements fo
 create policy "admin write team of week" on public.team_of_week for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin read roster movements" on public.roster_movements for select using (public.is_admin());
 create policy "admin write roster movements" on public.roster_movements for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin manage finance entries" on public.finance_entries for all using (public.is_admin() or public.has_league_role(array['treasury'])) with check (public.is_admin() or public.has_league_role(array['treasury']));
+create policy "admin manage notifications" on public.notifications for all using (public.is_admin() or public.has_league_role(array['media'])) with check (public.is_admin() or public.has_league_role(array['media']));
 create policy "admin write goals" on public.goals for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write match cards" on public.match_cards for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write sanctions" on public.sanctions for all using (public.is_admin()) with check (public.is_admin());
@@ -793,6 +829,8 @@ alter publication supabase_realtime add table public.achievements;
 alter publication supabase_realtime add table public.player_achievements;
 alter publication supabase_realtime add table public.team_of_week;
 alter publication supabase_realtime add table public.roster_movements;
+alter publication supabase_realtime add table public.finance_entries;
+alter publication supabase_realtime add table public.notifications;
 alter publication supabase_realtime add table public.goals;
 alter publication supabase_realtime add table public.match_cards;
 alter publication supabase_realtime add table public.sanctions;

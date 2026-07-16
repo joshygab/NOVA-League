@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveMatchAssignment, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveReferee, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, saveVenue, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveFinanceEntry, saveGoal, saveLeagueSettings, saveMatch, saveMatchAssignment, saveNews, saveNotification, saveNovaChampionsHistory, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveReferee, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, saveVenue, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import { hasPermission, permissions } from '../../lib/permissions'
@@ -21,7 +21,7 @@ const emptyEvent = { division_id: '', match_id: '', team_id: '', player_id: '', 
 const emptyGoal = { division_id: '', match_id: '', team_id: '', player_id: '', minute: '', goal_type: 'open_play', assist_player_id: '' }
 const emptyCard = { division_id: '', match_id: '', team_id: '', player_id: '', type: 'yellow', minute: '', reason: '' }
 const emptySanction = { division_id: '', sanction_target: 'player', player_id: '', team_id: '', sanction_type: '', reason: '', suspended_matches: '', start_date: '', status: 'active', notes: '' }
-const emptyNews = { title: '', excerpt: '', body: '', cover_url: '', coverFile: null }
+const emptyNews = { title: '', excerpt: '', body: '', category: 'noticia', cover_url: '', coverFile: null }
 const emptyChampionsMatch = { season_id: new Date().getFullYear().toString(), round: 'quarterfinal', match_order: 1, home_team_id: '', away_team_id: '', home_score: '', away_score: '', home_penalties: '', away_penalties: '', status: 'scheduled', match_date: '', venue: '', mvp_player_id: '', best_goalkeeper_player_id: '' }
 const emptyChampionsStat = { match_id: '', team_id: '', player_id: '', stat_type: 'goal', minute: '', value: 1 }
 const emptyChampionSpotlight = { is_active: false, display_mode: 'home_section', tournament_name: '', season_label: '', champion_team_id: '', champion_photo_url: '', championPhotoFile: null, message_title: '¡Felicidades, campeones!', message_body: 'Han conquistado la gloria de NOVA.' }
@@ -30,6 +30,9 @@ const emptyTeamOfWeek = { season_label: new Date().getFullYear().toString(), rou
 const emptyVenue = { name: '', address: '', map_url: '', capacity: '', status: 'active', notes: '' }
 const emptyReferee = { full_name: '', phone: '', email: '', status: 'active', authorized_divisions: [] }
 const emptyAssignment = { match_id: '', referee_id: '', venue_id: '', assignment_status: 'pending', notes: '' }
+const emptyFinance = { team_id: '', entry_type: 'charge', concept: '', amount: '', status: 'pending', due_date: '', paid_at: '', notes: '' }
+const emptyNotification = { title: '', body: '', notification_type: 'general', audience: 'public', team_id: '', publish_at: '', requires_ack: false, status: 'published' }
+const emptyChampionsHistory = { season_id: new Date().getFullYear().toString(), champion_team_id: '', runner_up_team_id: '', final_score: '', final_mvp_player_id: '', top_scorer_player_id: '', best_goalkeeper_player_id: '' }
 
 export default function AdminDashboard({ league }) {
   const [tab, setTab] = useState('dashboard')
@@ -122,6 +125,8 @@ export default function AdminDashboard({ league }) {
         {tab === 'tarjetas' && <CardForm busy={busy} run={run} league={league} />}
         {tab === 'sanciones-form' && <SanctionForm busy={busy} run={run} league={league} />}
         {tab === 'noticias' && <NewsForm busy={busy} run={run} news={league.news} />}
+        {tab === 'finanzas' && <FinanceAdmin busy={busy} run={run} league={league} />}
+        {tab === 'nova media' && <NovaMediaAdmin busy={busy} run={run} league={league} />}
         {tab === 'tabla' && <StandingsTable standings={league.standings} />}
         </section>
       </div>
@@ -138,7 +143,7 @@ export default function AdminDashboard({ league }) {
 
 function sectionForTool(tab) {
   if (['partidos-form', 'revisión de actas', 'canchas y árbitros', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
-  if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
+  if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias', 'nova media', 'finanzas'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones', 'plantillas', 'equipo de la jornada'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
   if (['bitacora'].includes(tab)) return 'dashboard'
@@ -165,6 +170,8 @@ function adminTitle(tab) {
     plantillas: 'Control de Plantillas',
     'equipo de la jornada': 'Equipo de la Jornada',
     'sanciones-form': 'Gestionar Sanciones',
+    finanzas: 'Finanzas',
+    'nova media': 'NOVA Media',
   }
   return titles[tab] || tab
 }
@@ -233,6 +240,8 @@ function AdminSummary({ league, setTab, run, busy, can }) {
         {can(permissions.PLAYERS_MANAGE) && <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />}
         {can(permissions.SETTINGS_MANAGE) && <AdminAction title="Modo Campeón" text="Presentación del campeón" onClick={() => setTab('modo campeón')} />}
         {can(permissions.AUDIT_READ) && <AdminAction title="Bitácora" text="Acciones recientes" onClick={() => setTab('bitacora')} />}
+        {can(permissions.FINANCE_MANAGE) && <AdminAction title="Finanzas" text="Pagos y adeudos" onClick={() => setTab('finanzas')} />}
+        {can(permissions.MEDIA_MANAGE) && <AdminAction title="NOVA Media" text="Noticias y avisos" onClick={() => setTab('nova media')} />}
       </section>
 
       {can(permissions.SETTINGS_MANAGE) && <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />}
@@ -478,6 +487,7 @@ function EquiposHub({ league, setTab, run, busy }) {
         <AdminAction title="Liga" text="Logo y portada" onClick={() => setTab('liga')} />
         <AdminAction title="Modo Campeón" text="Activar presentación" onClick={() => setTab('modo campeón')} />
         <AdminAction title="Tabla" text="Ver clasificación" onClick={() => setTab('tabla')} />
+        <AdminAction title="NOVA Media" text="Noticias y avisos" onClick={() => setTab('nova media')} />
       </div>
       <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />
     </section>
@@ -1135,6 +1145,7 @@ function NovaChampionsAdmin({ run, busy, league }) {
   const [settings, setSettings] = useState({ is_active: Boolean(cup.settings?.is_active), season_id: cup.settings?.season_id || new Date().getFullYear().toString(), format: cup.settings?.format || 8 })
   const [matchForm, setMatchForm] = useState(emptyChampionsMatch)
   const [statForm, setStatForm] = useState(emptyChampionsStat)
+  const [historyForm, setHistoryForm] = useState(emptyChampionsHistory)
   const [drawMode, setDrawMode] = useState('ranking')
   const qualifiedIds = new Set(cup.qualifiedTeams.map((row) => row.team_id))
   const qualifiedTeams = league.teams.filter((team) => qualifiedIds.has(team.id)).map((team) => {
@@ -1222,6 +1233,17 @@ function NovaChampionsAdmin({ run, busy, league }) {
         <Field label="Valor" value={statForm.value} onChange={(value) => setStatForm({ ...statForm, value })} />
         <SaveButton busy={busy} onClick={() => run(() => saveNovaChampionsStat(statForm), 'Estadística de copa guardada')} />
       </AdminGrid>
+
+      <AdminGrid title="Publicar campeón Champions" list={(cup.history || []).map((item) => `${item.season_id} · ${league.teamsById.get(item.champion_team_id)?.name || 'Campeón'}`)}>
+        <Field label="Temporada" value={historyForm.season_id} onChange={(season_id) => setHistoryForm({ ...historyForm, season_id })} />
+        <Select label="Campeón" value={historyForm.champion_team_id} onChange={(champion_team_id) => setHistoryForm({ ...historyForm, champion_team_id })} options={qualifiedTeams.length ? qualifiedTeams : league.teams} />
+        <Select label="Subcampeón" value={historyForm.runner_up_team_id} onChange={(runner_up_team_id) => setHistoryForm({ ...historyForm, runner_up_team_id })} options={qualifiedTeams.length ? qualifiedTeams : league.teams} />
+        <Field label="Marcador final" value={historyForm.final_score} onChange={(final_score) => setHistoryForm({ ...historyForm, final_score })} />
+        <Select label="MVP Final" value={historyForm.final_mvp_player_id} onChange={(final_mvp_player_id) => setHistoryForm({ ...historyForm, final_mvp_player_id })} options={league.players} />
+        <Select label="Campeón goleador" value={historyForm.top_scorer_player_id} onChange={(top_scorer_player_id) => setHistoryForm({ ...historyForm, top_scorer_player_id })} options={league.players} />
+        <Select label="Mejor portero" value={historyForm.best_goalkeeper_player_id} onChange={(best_goalkeeper_player_id) => setHistoryForm({ ...historyForm, best_goalkeeper_player_id })} options={league.players} />
+        <button className="button" disabled={busy || !historyForm.champion_team_id} onClick={() => run(() => saveNovaChampionsHistory(historyForm), 'Campeón Champions publicado')}>Publicar campeón</button>
+      </AdminGrid>
     </section>
   )
 }
@@ -1278,11 +1300,61 @@ function NewsForm({ run, busy, news }) {
     <EntityPicker label="Editar noticia" items={news} onPick={(item) => setForm({ ...emptyNews, ...item })} />
     <Field label="Título" value={form.title} onChange={(title) => setForm({ ...form, title })} />
     <Field label="Resumen" value={form.excerpt} onChange={(excerpt) => setForm({ ...form, excerpt })} />
+    <Select label="Categoría" value={form.category || 'noticia'} onChange={(category) => setForm({ ...form, category })} options={[{ id: 'noticia', name: 'Noticia' }, { id: 'previa', name: 'Previa' }, { id: 'cronica', name: 'Crónica' }, { id: 'fichaje', name: 'Fichaje' }, { id: 'sancion', name: 'Sanción' }, { id: 'comunicado', name: 'Comunicado' }]} />
     <label className="block text-sm font-bold">Cuerpo</label>
     <textarea className="input min-h-32" value={form.body || ''} onChange={(event) => setForm({ ...form, body: event.target.value })} />
     <FileField label="Portada" onChange={(coverFile) => setForm({ ...form, coverFile })} />
     <SaveButton busy={busy} onClick={() => run(() => saveNews(form))} />
   </AdminGrid>
+}
+
+function FinanceAdmin({ league, run, busy }) {
+  const [form, setForm] = useState(emptyFinance)
+  const rows = league.financeEntries || []
+  const totalDebt = rows.filter((row) => row.status !== 'paid' && row.entry_type === 'charge').reduce((sum, row) => sum + Number(row.amount || 0), 0)
+  const paid = rows.filter((row) => row.status === 'paid').reduce((sum, row) => sum + Number(row.amount || 0), 0)
+
+  return (
+    <section className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <AdminMetric label="Adeudos" value={`$${totalDebt}`} />
+        <AdminMetric label="Pagado" value={`$${paid}`} />
+        <AdminMetric label="Movimientos" value={rows.length} />
+      </div>
+      <AdminGrid title="Finanzas privadas" list={rows.slice(0, 12).map((row) => `${league.teamsById.get(row.team_id)?.name || 'Liga'} · ${row.concept} · $${row.amount} · ${row.status}`)}>
+        <EntityPicker label="Editar movimiento" items={rows} getLabel={(row) => `${row.concept} · $${row.amount}`} onPick={(row) => setForm({ ...emptyFinance, ...row, due_date: row.due_date || '', paid_at: row.paid_at || '' })} />
+        <Select label="Equipo" value={form.team_id || ''} onChange={(team_id) => setForm({ ...form, team_id })} options={league.teams} />
+        <Select label="Tipo" value={form.entry_type} onChange={(entry_type) => setForm({ ...form, entry_type })} options={[{ id: 'charge', name: 'Cargo' }, { id: 'payment', name: 'Pago' }, { id: 'expense', name: 'Gasto' }]} />
+        <Field label="Concepto" value={form.concept} onChange={(concept) => setForm({ ...form, concept })} />
+        <Field label="Monto" value={form.amount} onChange={(amount) => setForm({ ...form, amount })} />
+        <Select label="Estado" value={form.status} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'pending', name: 'Pendiente' }, { id: 'paid', name: 'Pagado' }, { id: 'overdue', name: 'Vencido' }, { id: 'cancelled', name: 'Cancelado' }]} />
+        <Field label="Fecha límite" type="date" value={form.due_date || ''} onChange={(due_date) => setForm({ ...form, due_date })} />
+        <Field label="Fecha de pago" type="date" value={form.paid_at || ''} onChange={(paid_at) => setForm({ ...form, paid_at })} />
+        <label className="block text-sm font-bold">Notas</label>
+        <textarea className="input min-h-24" value={form.notes || ''} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+        <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => saveFinanceEntry(form), 'Movimiento financiero guardado')} onDelete={() => run(() => deleteRecord('finance_entries', form.id), 'Movimiento eliminado')} />
+      </AdminGrid>
+    </section>
+  )
+}
+
+function NovaMediaAdmin({ league, run, busy }) {
+  const [notification, setNotification] = useState(emptyNotification)
+  return (
+    <section className="space-y-6">
+      <NewsForm run={run} busy={busy} news={league.news} />
+      <AdminGrid title="Enviar aviso" list={(league.notifications || []).slice(0, 10).map((item) => `${item.title} · ${item.audience}`)}>
+        <Field label="Título" value={notification.title} onChange={(title) => setNotification({ ...notification, title })} />
+        <label className="block text-sm font-bold">Mensaje</label>
+        <textarea className="input min-h-28" value={notification.body} onChange={(event) => setNotification({ ...notification, body: event.target.value })} />
+        <Select label="Tipo" value={notification.notification_type} onChange={(notification_type) => setNotification({ ...notification, notification_type })} options={[{ id: 'general', name: 'General' }, { id: 'schedule_change', name: 'Cambio de horario' }, { id: 'result', name: 'Resultado oficial' }, { id: 'sanction', name: 'Sanción' }, { id: 'payment', name: 'Pago' }, { id: 'champions', name: 'Champions Cup' }]} />
+        <Select label="Audiencia" value={notification.audience} onChange={(audience) => setNotification({ ...notification, audience })} options={[{ id: 'public', name: 'Público' }, { id: 'teams', name: 'Equipos' }, { id: 'captains', name: 'Capitanes' }, { id: 'admins', name: 'Admins' }]} />
+        <Select label="Equipo opcional" value={notification.team_id || ''} onChange={(team_id) => setNotification({ ...notification, team_id })} options={league.teams} />
+        <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={notification.requires_ack} onChange={(event) => setNotification({ ...notification, requires_ack: event.target.checked })} /> Requiere confirmación de lectura</label>
+        <button className="button" disabled={busy || !notification.title || !notification.body} onClick={() => run(() => saveNotification(notification), 'Aviso publicado')}>Publicar aviso</button>
+      </AdminGrid>
+    </section>
+  )
 }
 
 function AdminGrid({ title, list, children }) {

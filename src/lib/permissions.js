@@ -10,6 +10,8 @@ export const permissions = {
   DISCIPLINE_MANAGE: 'discipline.manage',
   SETTINGS_MANAGE: 'settings.manage',
   AUDIT_READ: 'audit.read',
+  FINANCE_MANAGE: 'finance.manage',
+  MEDIA_MANAGE: 'media.manage',
 }
 
 const rolePermissions = {
@@ -25,6 +27,7 @@ const rolePermissions = {
     permissions.PLAYERS_MANAGE,
     permissions.DISCIPLINE_MANAGE,
     permissions.AUDIT_READ,
+    permissions.MEDIA_MANAGE,
   ],
   [roles.divisionAdmin]: [
     permissions.ADMIN_ACCESS,
@@ -45,9 +48,11 @@ const rolePermissions = {
   ],
   [roles.treasury]: [
     permissions.ADMIN_ACCESS,
+    permissions.FINANCE_MANAGE,
   ],
   [roles.media]: [
     permissions.ADMIN_ACCESS,
+    permissions.MEDIA_MANAGE,
   ],
   [roles.captain]: [],
   [roles.player]: [],
