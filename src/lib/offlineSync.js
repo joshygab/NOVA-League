@@ -1,4 +1,4 @@
-import { saveDigitalMatchEvent, saveRefereeAttendance, updateMatchLiveState } from './adminApi'
+import { saveDigitalMatchEvent, saveRefereeAttendance, saveRefereeMatchEvent, updateMatchLiveState, voidRefereeMatchEvent } from './adminApi'
 import { readOfflineQueue, removeOfflineAction, updateOfflineAction } from './offlineQueue'
 
 export async function syncOfflineQueue() {
@@ -27,5 +27,7 @@ async function syncOfflineAction(item) {
   if (item.type === 'match_event') return saveDigitalMatchEvent(item.payload)
   if (item.type === 'attendance_checkin') return saveRefereeAttendance(item.payload)
   if (item.type === 'match_live_state') return updateMatchLiveState(item.payload.matchId, item.payload.patch, item.payload.reason)
+  if (item.type === 'referee_match_event') return saveRefereeMatchEvent(item.payload)
+  if (item.type === 'void_referee_match_event') return voidRefereeMatchEvent(item.payload)
   return { error: { message: `Tipo de acción no soportado: ${item.type}` } }
 }

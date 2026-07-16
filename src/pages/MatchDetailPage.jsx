@@ -1,4 +1,5 @@
 import { Navigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { CalendarDays, FileText, MapPin, ShieldCheck, Star, Users } from 'lucide-react'
 import Badge from '../components/Badge'
 import Crest from '../components/Crest'
@@ -10,9 +11,18 @@ import { goalTypeLabel } from '../lib/labels'
 import { calculateNovaRating } from '../lib/playerProgression'
 
 export default function MatchDetailPage({ league }) {
+  const [now, setNow] = useState(Date.now())
   const { id, matchId } = useParams()
   const targetId = matchId || id
   const match = league.matches.find((item) => item.id === targetId) || league.novaChampions?.matches?.find((item) => item.id === targetId)
+  const routeLive = match?.status === 'in_progress' || match?.status === 'live'
+
+  useEffect(() => {
+    if (!routeLive) return undefined
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [routeLive])
+
   if (!match) return <Navigate to="/partidos" replace />
   const isChampions = !league.matches.some((item) => item.id === targetId)
 
@@ -21,6 +31,11 @@ export default function MatchDetailPage({ league }) {
   const division = league.divisionsById.get(match.division_id || home?.division_id)
   const played = isFinishedMatch(match.status)
   const live = match.status === 'in_progress' || match.status === 'live'
+  const liveSeconds = live ? calculateLiveSeconds(match, now) : 0
+  const liveScore = {
+    home: Number(match.home_score_live ?? match.home_score ?? 0),
+    away: Number(match.away_score_live ?? match.away_score ?? 0),
+  }
   const standings = league.divisionTables.find((item) => item.id === division?.id)?.standings || []
   const homeStanding = standings.find((team) => team.id === home?.id)
   const awayStanding = standings.find((team) => team.id === away?.id)
@@ -52,8 +67,9 @@ export default function MatchDetailPage({ league }) {
           <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <TeamHero team={home} standing={homeStanding} align="right" />
             <div className="rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-center">
-              {played ? <p className="text-4xl font-black text-white">{match.home_score} - {match.away_score}</p> : <p className="text-xl font-black text-gold">VS</p>}
+              {live ? <p className="text-4xl font-black text-white">{liveScore.home} - {liveScore.away}</p> : played ? <p className="text-4xl font-black text-white">{match.home_score} - {match.away_score}</p> : <p className="text-xl font-black text-gold">VS</p>}
               <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gold">Jornada {match.round}</p>
+              {live && <p className="mt-2 rounded bg-red-500/15 px-2 py-1 text-xs font-black text-red-100">Marcador provisional · {match.current_period || 'En vivo'} · {formatClock(liveSeconds)}</p>}
             </div>
             <TeamHero team={away} standing={awayStanding} />
           </div>
@@ -62,12 +78,26 @@ export default function MatchDetailPage({ league }) {
 
         {!played && (
           <section className="grid gap-4 lg:grid-cols-3">
+            {live && <LivePublicPanel match={match} seconds={liveSeconds} />}
             <FormCard title="Últimos resultados local" team={home} matches={recentMatches(league.matches, home?.id)} league={league} />
             <FormCard title="Últimos resultados visitante" team={away} matches={recentMatches(league.matches, away?.id)} league={league} />
             <section className="panel p-5">
               <h2 className="text-xl font-black">Jugadores destacados</h2>
               <div className="mt-4 space-y-3">{featured.map((player) => <PlayerLine key={player.id} player={player} />)}</div>
             </section>
+          </section>
+        )}
+
+        {live && (
+          <section className="panel p-5">
+            <h2 className="mb-4 text-xl font-black">Timeline en vivo</h2>
+            <div className="space-y-2">
+              {timeline.length ? timeline.map((item) => (
+                <p key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                  <span className="font-black text-gold">{item.minute}'</span> {item.icon} {item.text}
+                </p>
+              )) : <p className="text-sm text-slate-400">Aún no hay eventos en vivo.</p>}
+            </div>
           </section>
         )}
 
@@ -150,6 +180,25 @@ function FormCard({ title, matches, league }) {
   return <section className="panel p-5"><h2 className="text-xl font-black">{title}</h2><div className="mt-4 space-y-2">{matches.length ? matches.map((match) => <p key={match.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">{league.teamsById.get(match.home_team_id)?.name} {match.home_score} - {match.away_score} {league.teamsById.get(match.away_team_id)?.name}</p>) : <p className="text-sm text-slate-400">Sin resultados recientes.</p>}</div></section>
 }
 
+function LivePublicPanel({ match, seconds }) {
+  const updated = match.last_live_update_at ? secondsAgo(match.last_live_update_at) : null
+  const stale = match.last_live_update_at && Date.now() - new Date(match.last_live_update_at).getTime() > 90000
+  return (
+    <section className="panel p-5 lg:col-span-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-red-200">EN VIVO</p>
+          <h2 className="mt-1 text-3xl font-black text-gold">{formatClock(seconds)}</h2>
+        </div>
+        <Badge tone={stale ? 'gold' : 'red'}>{stale ? 'Transmisión interrumpida' : 'Marcador provisional'}</Badge>
+      </div>
+      <p className="mt-3 text-sm text-slate-400">
+        Periodo: {match.current_period || 'En vivo'} · {updated ? `Última actualización hace ${updated}` : 'Esperando primera actualización'}
+      </p>
+    </section>
+  )
+}
+
 function PlayerLine({ player }) {
   return <div className="flex items-center gap-3 rounded-lg bg-white/5 p-3"><PlayerAvatar src={player.photo_url} name={player.name} size="sm" /><div><p className="font-bold">{player.name}</p><p className="text-xs text-slate-400">G {player.goals || 0} · A {player.assists || 0} · MVP {player.mvpAwards || 0}</p></div></div>
 }
@@ -221,4 +270,22 @@ function matchStatusLabel(status) {
 function formatMatchDate(value) {
   if (!value) return 'Fecha por definir'
   return new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function calculateLiveSeconds(match, now) {
+  const accumulated = Number(match.live_accumulated_seconds || 0)
+  if (!match.live_started_at || match.live_paused_at || !['in_progress', 'live'].includes(match.status)) return accumulated
+  return accumulated + Math.max(0, Math.floor((now - new Date(match.live_started_at).getTime()) / 1000))
+}
+
+function formatClock(seconds) {
+  const mins = Math.floor(Math.max(0, seconds) / 60)
+  const secs = Math.max(0, seconds) % 60
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
+function secondsAgo(value) {
+  const diff = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000))
+  if (diff < 60) return `${diff}s`
+  return `${Math.floor(diff / 60)} min`
 }

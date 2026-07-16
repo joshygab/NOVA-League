@@ -424,6 +424,75 @@ export async function saveRefereeAttendance({ match, player, method = 'manual', 
   return auditResult(roster, { action: 'attendance_checkin', module: 'referee_mode', entityTable: 'match_roster', entityId: `${match.id}:${player.id}`, newValue: rosterPayload })
 }
 
+export async function saveRefereeMatchEvent({ match, event, liveScore }) {
+  if (!match?.id) return { error: { message: 'Selecciona un partido.' } }
+  if (!event?.event_type) return { error: { message: 'Selecciona una acción.' } }
+  const previousMatch = await readRecord('matches', match.id)
+  const clientEventId = event.client_event_id || crypto.randomUUID()
+  const payload = {
+    division_id: match.division_id || null,
+    match_id: match.id,
+    team_id: event.team_id || null,
+    player_id: event.player_id || null,
+    related_player_id: event.related_player_id || null,
+    type: event.event_type,
+    event_type: event.event_type,
+    minute: event.minute ? Number(event.minute) : 0,
+    detail: event.detail || null,
+    client_event_id: clientEventId,
+    secondary_player_id: event.related_player_id || null,
+    period: event.period || null,
+    match_second: Number(event.match_second || 0),
+    device_id: event.device_id || null,
+    sync_status: 'synced',
+    metadata: event.metadata || {},
+  }
+
+  const eventResult = await supabase.from('match_events').insert(payload).select().single()
+  if (eventResult.error) return eventResult
+
+  const scorePatch = {
+    status: 'in_progress',
+    home_score_live: Number(liveScore?.home ?? previousMatch?.home_score_live ?? previousMatch?.home_score ?? 0),
+    away_score_live: Number(liveScore?.away ?? previousMatch?.away_score_live ?? previousMatch?.away_score ?? 0),
+    last_live_update_at: new Date().toISOString(),
+    live_version: Number(previousMatch?.live_version || 1) + 1,
+  }
+  const matchResult = await supabase.from('matches').update(scorePatch).eq('id', match.id).select().single()
+  if (matchResult.error) return matchResult
+
+  await logAudit({ action: 'create_referee_event', module: 'referee_mode', entityTable: 'match_events', entityId: eventResult.data.id, newValue: { event: eventResult.data, liveScore: scorePatch } })
+  return eventResult
+}
+
+export async function voidRefereeMatchEvent({ match, event, liveScore, reason }) {
+  if (!match?.id || !event?.id) return { error: { message: 'Selecciona el evento a deshacer.' } }
+  const previousEvent = await readRecord('match_events', event.id)
+  const eventResult = await supabase
+    .from('match_events')
+    .update({
+      is_voided: true,
+      void_reason: reason || 'Deshacer último evento',
+      sync_status: 'synced',
+    })
+    .eq('id', event.id)
+    .select()
+    .single()
+  if (eventResult.error) return eventResult
+
+  const previousMatch = await readRecord('matches', match.id)
+  const scorePatch = {
+    home_score_live: Number(liveScore?.home ?? previousMatch?.home_score_live ?? previousMatch?.home_score ?? 0),
+    away_score_live: Number(liveScore?.away ?? previousMatch?.away_score_live ?? previousMatch?.away_score ?? 0),
+    last_live_update_at: new Date().toISOString(),
+    live_version: Number(previousMatch?.live_version || 1) + 1,
+  }
+  const matchResult = await supabase.from('matches').update(scorePatch).eq('id', match.id)
+  if (matchResult.error) return matchResult
+
+  return auditResult(eventResult, { action: 'void_referee_event', module: 'referee_mode', entityTable: 'match_events', entityId: event.id, previousValue: previousEvent, reason })
+}
+
 export async function approvePlayer(playerId, teamId) {
   if (!teamId) return { error: { message: 'Selecciona un equipo antes de aprobar al jugador.' } }
   const previous = await readRecord('players', playerId)

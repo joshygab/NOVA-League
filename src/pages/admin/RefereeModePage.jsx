@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
-import { Camera, CheckCircle, Clock, Pause, Play, Search, ShieldAlert, Square, TimerReset, Wifi, WifiOff } from 'lucide-react'
+import { Camera, CheckCircle, Clock, Pause, Play, Search, ShieldAlert, TimerReset, Undo2, Wifi, WifiOff } from 'lucide-react'
 import Badge from '../../components/Badge'
 import Crest from '../../components/Crest'
 import PlayerAvatar from '../../components/PlayerAvatar'
-import { saveRefereeAttendance, updateMatchLiveState } from '../../lib/adminApi'
+import { saveRefereeAttendance, saveRefereeMatchEvent, updateMatchLiveState, voidRefereeMatchEvent } from '../../lib/adminApi'
 import { useAuth } from '../../lib/AuthContext'
 import { roles } from '../../lib/auth'
 import { parseNovaId, playerNovaId, playerStatus } from '../../lib/novaId'
@@ -333,9 +333,21 @@ function ManualRoster({ players, presentIds, league, match, onMark }) {
 function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
   const [timer, setTimer] = useState(() => loadTimer(match))
   const [now, setNow] = useState(Date.now())
+  const [action, setAction] = useState('')
+  const [busyEvent, setBusyEvent] = useState(false)
+  const [localEvents, setLocalEvents] = useState([])
+  const [liveScore, setLiveScore] = useState({ home: Number(match.home_score_live ?? match.home_score ?? 0), away: Number(match.away_score_live ?? match.away_score ?? 0) })
   const home = league.teamsById.get(match.home_team_id)
   const away = league.teamsById.get(match.away_team_id)
   const elapsed = currentElapsed(timer, now)
+  const presentRows = league.matchRoster.filter((row) => row.match_id === match.id && row.confirmed !== false)
+  const presentIds = new Set(presentRows.map((row) => row.player_id))
+  const matchPlayers = league.players.filter((player) => [match.home_team_id, match.away_team_id].includes(player.team_id))
+  const availablePlayers = matchPlayers.filter((player) => presentIds.size === 0 || presentIds.has(player.id))
+  const allEvents = [...league.events.filter((event) => event.match_id === match.id), ...localEvents]
+    .filter((event) => !event.is_voided)
+    .sort((a, b) => Number(a.match_second || a.minute || 0) - Number(b.match_second || b.minute || 0))
+  const lastEvent = [...allEvents].reverse()[0]
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
@@ -382,6 +394,67 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
     commit({ ...timer, period, accumulated_seconds: elapsed, started_at: period === 'Finalizado' || period === 'Suspendido' ? null : new Date().toISOString(), paused_at: null, running: !['Finalizado', 'Suspendido', 'Descanso'].includes(period) }, 'change_match_period')
   }
 
+  async function registerEvent(event) {
+    if (busyEvent) return
+    setBusyEvent(true)
+    const clientEventId = crypto.randomUUID()
+    const nextScore = scoreAfterEvent(liveScore, event, match)
+    const payload = {
+      match,
+      event: {
+        ...event,
+        client_event_id: clientEventId,
+        period: timer.period,
+        match_second: elapsed,
+        minute: Math.max(1, Math.ceil(elapsed / 60)),
+        device_id: deviceId(),
+      },
+      liveScore: nextScore,
+    }
+    const optimistic = {
+      ...payload.event,
+      id: clientEventId,
+      match_id: match.id,
+      sync_status: online ? 'syncing' : 'pending',
+      created_at: new Date().toISOString(),
+    }
+    setLocalEvents((rows) => [...rows, optimistic])
+    setLiveScore(nextScore)
+    setAction('')
+
+    if (!online || !hasSupabaseConfig) {
+      queueOfflineAction({ type: 'referee_match_event', payload })
+      setMessage(`${eventLabel(event.event_type)} guardado en el dispositivo.`)
+      setBusyEvent(false)
+      return
+    }
+    const result = await saveRefereeMatchEvent(payload)
+    setBusyEvent(false)
+    if (result.error) {
+      setMessage(result.error.message)
+      return
+    }
+    setMessage(`${eventLabel(event.event_type)} registrado. Marcador provisional ${nextScore.home}-${nextScore.away}.`)
+    league.reload?.()
+  }
+
+  async function undoLastEvent() {
+    if (!lastEvent) return
+    const reason = window.prompt('Motivo para deshacer el último evento:', 'Corrección arbitral')
+    if (!reason) return
+    const nextScore = scoreBeforeEvent(liveScore, lastEvent, match)
+    setLiveScore(nextScore)
+    setLocalEvents((rows) => rows.map((row) => row.id === lastEvent.id ? { ...row, is_voided: true, void_reason: reason } : row))
+    if (String(lastEvent.id).length < 30 || !online || !hasSupabaseConfig) {
+      queueOfflineAction({ type: 'void_referee_match_event', payload: { match, event: lastEvent, liveScore: nextScore, reason } })
+      setMessage('Evento marcado para deshacer al sincronizar.')
+      return
+    }
+    const result = await voidRefereeMatchEvent({ match, event: lastEvent, liveScore: nextScore, reason })
+    setMessage(result.error ? result.error.message : 'Último evento anulado.')
+    league.reload?.()
+  }
+
   return (
     <section className="space-y-4">
       <button className="button-secondary" onClick={onBack}>Volver a preparación</button>
@@ -391,12 +464,12 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
           <span className="inline-flex items-center gap-2 text-xs text-slate-300">{online ? <Wifi size={16} /> : <WifiOff size={16} />}{online ? 'Sincronizado' : 'Pendiente de sincronizar'}</span>
         </div>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-          <ScoreTeam team={home} score={match.home_score_live ?? match.home_score ?? 0} />
+          <ScoreTeam team={home} score={liveScore.home} />
           <div>
             <p className="text-5xl font-black text-gold">{formatClock(elapsed)}</p>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{timer.period}</p>
           </div>
-          <ScoreTeam team={away} score={match.away_score_live ?? match.away_score ?? 0} />
+          <ScoreTeam team={away} score={liveScore.away} />
         </div>
       </div>
 
@@ -413,7 +486,137 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
 
       <div className="panel p-4">
         <h2 className="text-xl font-black">Acciones rápidas</h2>
-        <p className="mt-1 text-sm text-slate-400">Fase A deja listo el reloj profesional. Goles, tarjetas, cambios y deshacer entran en Fase B usando esta misma pantalla.</p>
+        <p className="mt-1 text-sm text-slate-400">Registra lo que acaba de pasar. Todo queda como marcador provisional hasta que el admin apruebe el acta.</p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button className="button min-h-16 text-base" disabled={busyEvent} onClick={() => setAction('goal')}>⚽ Gol</button>
+          <button className="button-secondary min-h-16 text-base" disabled={busyEvent} onClick={() => setAction('card')}>🟨 Tarjeta</button>
+          <button className="button-secondary min-h-16 text-base" disabled={busyEvent} onClick={() => setAction('substitution')}>🔁 Cambio</button>
+          <button className="button-secondary min-h-16 text-base" disabled={!lastEvent} onClick={undoLastEvent}><Undo2 size={18} />Deshacer</button>
+        </div>
+      </div>
+
+      {action === 'goal' && <GoalSheet match={match} teams={[home, away]} players={availablePlayers} onCancel={() => setAction('')} onSave={registerEvent} />}
+      {action === 'card' && <CardSheet match={match} teams={[home, away]} players={availablePlayers} events={allEvents} onCancel={() => setAction('')} onSave={registerEvent} />}
+      {action === 'substitution' && <SubstitutionSheet match={match} teams={[home, away]} players={availablePlayers} onCancel={() => setAction('')} onSave={registerEvent} />}
+
+      <EventTimeline events={allEvents.slice(-8).reverse()} league={league} />
+    </section>
+  )
+}
+
+function GoalSheet({ match, teams, players, onCancel, onSave }) {
+  const [teamId, setTeamId] = useState(match.home_team_id)
+  const [playerId, setPlayerId] = useState('')
+  const [assistId, setAssistId] = useState('')
+  const [goalType, setGoalType] = useState('open_play')
+  const teamPlayers = players.filter((player) => player.team_id === teamId)
+  return (
+    <ActionPanel title="Registrar gol" onCancel={onCancel}>
+      <TeamChoice teams={teams} value={teamId} onChange={(value) => { setTeamId(value); setPlayerId(''); setAssistId('') }} />
+      <PlayerGrid players={teamPlayers} value={playerId} onChange={setPlayerId} />
+      <select className="input" value={goalType} onChange={(event) => setGoalType(event.target.value)}>
+        <option value="open_play">Gol normal</option>
+        <option value="penalty">Penal</option>
+        <option value="free_kick">Tiro libre</option>
+        <option value="own_goal">Autogol</option>
+        <option value="unknown">Gol sin autor identificado</option>
+      </select>
+      <select className="input" value={assistId} onChange={(event) => setAssistId(event.target.value)}>
+        <option value="">Sin asistencia</option>
+        {teamPlayers.filter((player) => player.id !== playerId).map((player) => <option key={player.id} value={player.id}>#{player.number || '--'} {player.name}</option>)}
+      </select>
+      <button className="button min-h-14 w-full" disabled={!teamId || (!playerId && goalType !== 'unknown')} onClick={() => onSave({ event_type: 'goal', team_id: teamId, player_id: playerId || null, related_player_id: assistId || null, detail: goalType, metadata: { goal_type: goalType } })}>Guardar gol</button>
+    </ActionPanel>
+  )
+}
+
+function CardSheet({ match, teams, players, events, onCancel, onSave }) {
+  const [teamId, setTeamId] = useState(match.home_team_id)
+  const [playerId, setPlayerId] = useState('')
+  const [cardType, setCardType] = useState('yellow_card')
+  const [reason, setReason] = useState('Conducta antideportiva')
+  const teamPlayers = players.filter((player) => player.team_id === teamId)
+  const previousYellow = events.some((event) => event.player_id === playerId && event.event_type === 'yellow_card')
+
+  function save() {
+    if ((cardType === 'red_card' || cardType === 'second_yellow') && !window.confirm('¿Confirmas la expulsión de este jugador?')) return
+    onSave({ event_type: cardType, team_id: teamId, player_id: playerId, detail: reason, metadata: { card_type: cardType, reason } })
+  }
+
+  return (
+    <ActionPanel title="Registrar tarjeta" onCancel={onCancel}>
+      <TeamChoice teams={teams} value={teamId} onChange={(value) => { setTeamId(value); setPlayerId('') }} />
+      <PlayerGrid players={teamPlayers} value={playerId} onChange={setPlayerId} />
+      {previousYellow && <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">Este jugador ya tiene amarilla.</p>}
+      <select className="input" value={cardType} onChange={(event) => setCardType(event.target.value)}>
+        <option value="yellow_card">Amarilla</option>
+        <option value="second_yellow">Segunda amarilla</option>
+        <option value="red_card">Roja directa</option>
+        <option value="staff_card">Cuerpo técnico</option>
+      </select>
+      <select className="input" value={reason} onChange={(event) => setReason(event.target.value)}>
+        {['Conducta antideportiva', 'Juego brusco', 'Reclamos', 'Insultos', 'Agresión', 'Doble amarilla', 'Otro'].map((item) => <option key={item} value={item}>{item}</option>)}
+      </select>
+      <button className="button min-h-14 w-full" disabled={!teamId || !playerId} onClick={save}>Guardar tarjeta</button>
+    </ActionPanel>
+  )
+}
+
+function SubstitutionSheet({ match, teams, players, onCancel, onSave }) {
+  const [teamId, setTeamId] = useState(match.home_team_id)
+  const [outId, setOutId] = useState('')
+  const [inId, setInId] = useState('')
+  const teamPlayers = players.filter((player) => player.team_id === teamId)
+  return (
+    <ActionPanel title="Registrar cambio" onCancel={onCancel}>
+      <TeamChoice teams={teams} value={teamId} onChange={(value) => { setTeamId(value); setOutId(''); setInId('') }} />
+      <p className="text-sm font-bold text-slate-300">Jugador que sale</p>
+      <PlayerGrid players={teamPlayers} value={outId} onChange={setOutId} />
+      <p className="text-sm font-bold text-slate-300">Jugador que entra</p>
+      <PlayerGrid players={teamPlayers.filter((player) => player.id !== outId)} value={inId} onChange={setInId} />
+      <button className="button min-h-14 w-full" disabled={!teamId || !outId || !inId} onClick={() => onSave({ event_type: 'substitution', team_id: teamId, player_id: outId, related_player_id: inId, detail: 'Cambio', metadata: { out_player_id: outId, in_player_id: inId } })}>Guardar cambio</button>
+    </ActionPanel>
+  )
+}
+
+function ActionPanel({ title, children, onCancel }) {
+  return (
+    <section className="rounded-lg border border-gold/30 bg-black p-4 shadow-gold">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black">{title}</h2>
+        <button className="button-secondary" onClick={onCancel}>Cancelar</button>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  )
+}
+
+function TeamChoice({ teams, value, onChange }) {
+  return <div className="grid grid-cols-2 gap-2">{teams.map((team) => <button key={team.id} className={value === team.id ? 'button' : 'button-secondary'} onClick={() => onChange(team.id)}>{team.name}</button>)}</div>
+}
+
+function PlayerGrid({ players, value, onChange }) {
+  return (
+    <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
+      {players.map((player) => (
+        <button key={player.id} className={`rounded-lg border p-3 text-left ${value === player.id ? 'border-gold bg-gold/15' : 'border-white/10 bg-white/5'}`} onClick={() => onChange(player.id)}>
+          <div className="flex items-center gap-3">
+            <PlayerAvatar src={player.photo_url} name={player.name} size="sm" />
+            <span className="font-black">#{player.number || '--'} {player.name}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function EventTimeline({ events, league }) {
+  return (
+    <section className="panel p-4">
+      <h2 className="text-xl font-black">Últimos eventos</h2>
+      <div className="mt-3 space-y-2">
+        {events.map((event) => <p key={event.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"><span className="font-black text-gold">{event.minute || Math.ceil((event.match_second || 0) / 60)}'</span> {eventIcon(event.event_type || event.type)} {league.playersById.get(event.player_id)?.name || event.detail || 'Evento'} {event.related_player_id && `→ ${league.playersById.get(event.related_player_id)?.name || ''}`}</p>)}
+        {events.length === 0 && <p className="text-sm text-slate-400">Sin eventos todavía.</p>}
       </div>
     </section>
   )
@@ -535,4 +738,37 @@ function statusLabel(status) {
   if (status === 'official') return 'Oficial'
   if (status === 'problem') return 'Problema'
   return 'Programado'
+}
+
+function eventIcon(type) {
+  if (type === 'goal') return '⚽'
+  if (type === 'yellow_card') return '🟨'
+  if (type === 'red_card' || type === 'second_yellow') return '🟥'
+  if (type === 'assist') return '🎯'
+  if (type === 'substitution') return '🔁'
+  return '📝'
+}
+
+function scoreAfterEvent(score, event, match) {
+  if (event.event_type !== 'goal') return score
+  if (event.team_id === match.home_team_id) return { ...score, home: score.home + 1 }
+  if (event.team_id === match.away_team_id) return { ...score, away: score.away + 1 }
+  return score
+}
+
+function scoreBeforeEvent(score, event, match) {
+  const type = event.event_type || event.type
+  if (type !== 'goal') return score
+  if (event.team_id === match.home_team_id) return { ...score, home: Math.max(0, score.home - 1) }
+  if (event.team_id === match.away_team_id) return { ...score, away: Math.max(0, score.away - 1) }
+  return score
+}
+
+function eventLabel(type) {
+  if (type === 'goal') return 'Gol'
+  if (type === 'yellow_card') return 'Tarjeta amarilla'
+  if (type === 'second_yellow') return 'Segunda amarilla'
+  if (type === 'red_card') return 'Tarjeta roja'
+  if (type === 'substitution') return 'Cambio'
+  return 'Evento'
 }
