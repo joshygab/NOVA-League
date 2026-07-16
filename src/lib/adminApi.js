@@ -271,6 +271,80 @@ export async function saveTeamOfWeekSelection(form) {
   return auditResult(result, { action: 'update', module: 'team_of_week', entityTable: 'team_of_week' })
 }
 
+export async function saveCaptainAttendance(form) {
+  const result = await supabase.from('captain_attendance').upsert({
+    match_id: form.match_id,
+    team_id: form.team_id,
+    captain_player_id: form.captain_player_id || null,
+    status: form.status || 'confirmed',
+    note: form.note || null,
+  }, { onConflict: 'match_id,team_id' }).select().single()
+  return auditResult(result, { action: 'update', module: 'captain_zone', entityTable: 'captain_attendance' })
+}
+
+export async function saveClarificationRequest(form) {
+  const result = await supabase.from('clarification_requests').insert({
+    match_id: form.match_id || null,
+    team_id: form.team_id || null,
+    player_id: form.player_id || null,
+    subject: form.subject,
+    explanation: form.explanation,
+    evidence_url: form.evidence_url || null,
+    status: 'received',
+  }).select().single()
+  return auditResult(result, { action: 'create', module: 'clarifications', entityTable: 'clarification_requests' })
+}
+
+export async function saveVenue(form) {
+  const previous = await readRecord('venues', form.id)
+  const result = await supabase.from('venues').upsert({
+    id: form.id || undefined,
+    name: form.name,
+    address: form.address || null,
+    map_url: form.map_url || null,
+    capacity: form.capacity ? Number(form.capacity) : null,
+    photo_url: form.photo_url || null,
+    status: form.status || 'active',
+    notes: form.notes || null,
+  }).select().single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'venues', entityTable: 'venues', previousValue: previous })
+}
+
+export async function saveReferee(form) {
+  const previous = await readRecord('referees', form.id)
+  const result = await supabase.from('referees').upsert({
+    id: form.id || undefined,
+    full_name: form.full_name,
+    phone: form.phone || null,
+    email: form.email || null,
+    status: form.status || 'active',
+    authorized_divisions: form.authorized_divisions || [],
+  }).select().single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'referees', entityTable: 'referees', previousValue: previous })
+}
+
+export async function saveMatchAssignment(form) {
+  const previous = form.match_id ? await supabase.from('match_assignments').select('*').eq('match_id', form.match_id).maybeSingle() : { data: null }
+  const result = await supabase.from('match_assignments').upsert({
+    match_id: form.match_id,
+    referee_id: form.referee_id || null,
+    venue_id: form.venue_id || null,
+    assignment_status: form.assignment_status || 'pending',
+    notes: form.notes || null,
+  }, { onConflict: 'match_id' }).select().single()
+  if (result.error) return result
+
+  if (form.venue_id) {
+    const venue = await readRecord('venues', form.venue_id)
+    if (venue?.name) {
+      const matchResult = await supabase.from('matches').update({ venue: venue.name }).eq('id', form.match_id)
+      if (matchResult.error) return matchResult
+    }
+  }
+
+  return auditResult(result, { action: 'update', module: 'calendar', entityTable: 'match_assignments', previousValue: previous.data || null })
+}
+
 export async function approvePlayer(playerId, teamId) {
   if (!teamId) return { error: { message: 'Selecciona un equipo antes de aprobar al jugador.' } }
   const previous = await readRecord('players', playerId)

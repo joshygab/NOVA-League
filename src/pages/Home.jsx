@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { ArrowRight, Radio, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowRight, Radio, ShieldCheck, Sparkles, Trophy } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import ChampionSpotlight from '../components/ChampionSpotlight'
 import MatchCard from '../components/MatchCard'
@@ -7,7 +7,16 @@ import StatCard from '../components/StatCard'
 import StandingsTable from '../components/StandingsTable'
 
 export default function Home({ league }) {
-  const nextMatches = league.matches.slice(0, 2)
+  const liveMatch = league.matches.find((match) => match.status === 'in_progress' || match.status === 'live')
+  const nextMatches = league.matches
+    .filter((match) => !['played', 'official'].includes(match.status))
+    .sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
+    .slice(0, 2)
+  const recentResults = league.matches
+    .filter((match) => ['played', 'official'].includes(match.status))
+    .sort((a, b) => new Date(b.match_date || 0) - new Date(a.match_date || 0))
+    .slice(0, 3)
+  const teamOfWeek = (league.teamOfWeek || []).slice(0, 4)
   const settings = league.settings || {}
   const championSpotlight = league.championSpotlight
   const championTeam = championSpotlight?.champion_team_id ? league.teamsById.get(championSpotlight.champion_team_id) : null
@@ -43,6 +52,7 @@ export default function Home({ league }) {
         <section className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
           <ChampionSpotlight spotlight={championSpotlight} team={championTeam} />
           <div>
+            <Link to="/tabla" className="button mb-4 w-full">Ver tabla general</Link>
             <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Sparkles className="text-gold" /> Próximos partidos</div>
             <div className="space-y-4">
               {nextMatches.map((match) => <MatchCard key={match.id} match={match} teamsById={league.teamsById} playersById={league.playersById} />)}
@@ -52,6 +62,12 @@ export default function Home({ league }) {
       ) : (
         <section className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
           <div>
+            {liveMatch && (
+              <section className="mb-6 rounded-lg border border-red-400/40 bg-red-500/10 p-4">
+                <p className="mb-3 inline-flex rounded-lg bg-red-500 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-white">EN VIVO</p>
+                <Link to={`/match/${liveMatch.id}`} className="block"><MatchCard match={liveMatch} teamsById={league.teamsById} playersById={league.playersById} /></Link>
+              </section>
+            )}
             <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><ShieldCheck className="text-electric" /> Clasificación por división</div>
             <div className="space-y-5">
               {league.divisionTables.map((division) => (
@@ -68,11 +84,39 @@ export default function Home({ league }) {
           <div>
             <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Sparkles className="text-gold" /> Próximos partidos</div>
             <div className="space-y-4">
-              {nextMatches.map((match) => <MatchCard key={match.id} match={match} teamsById={league.teamsById} playersById={league.playersById} />)}
+              {nextMatches.map((match) => <Link key={match.id} to={`/match/${match.id}`} className="block"><MatchCard match={match} teamsById={league.teamsById} playersById={league.playersById} /></Link>)}
+              {nextMatches.length === 0 && <p className="panel p-4 text-sm text-slate-400">No hay próximos partidos programados.</p>}
             </div>
           </div>
         </section>
       )}
+
+      <section className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]">
+        <div className="panel p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-xl font-black"><Radio className="text-electric" /> Resultados recientes</h2>
+          <div className="space-y-3">
+            {recentResults.map((match) => <Link key={match.id} to={`/match/${match.id}`} className="block"><MatchCard match={match} teamsById={league.teamsById} playersById={league.playersById} /></Link>)}
+            {recentResults.length === 0 && <p className="text-sm text-slate-400">Todavía no hay resultados recientes.</p>}
+          </div>
+        </div>
+        <div className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+          <h2 className="mb-4 flex items-center gap-2 text-xl font-black"><Trophy className="text-gold" /> Equipo de la Jornada</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {teamOfWeek.map((row) => {
+              const player = league.playersById.get(row.player_id)
+              const team = league.teamsById.get(row.team_id)
+              return (
+                <Link key={row.id} to={player ? `/jugadores/${player.id}` : '/jugadores'} className="rounded-lg border border-white/10 bg-white/5 p-3 transition hover:border-gold/50">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-gold">J{row.round} · {row.slot}</p>
+                  <p className="mt-2 font-black">{player?.name || 'Jugador'}</p>
+                  <p className="text-sm text-slate-400">{team?.name || 'Equipo'}</p>
+                </Link>
+              )
+            })}
+            {teamOfWeek.length === 0 && <p className="text-sm text-slate-400">Aún no hay selección publicada.</p>}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

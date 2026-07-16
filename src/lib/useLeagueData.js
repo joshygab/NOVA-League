@@ -3,7 +3,7 @@ import { fetchLeagueData, subscribeToLeagueChanges } from './data'
 import { buildMvpRanking, buildPlayerStats, calculateDivisionStandings, calculateStandings } from './standings'
 
 export function useLeagueData() {
-  const [data, setData] = useState({ divisions: [], seasonHistory: [], teams: [], players: [], matches: [], goals: [], events: [], cards: [], lineups: [], reports: [], matchRoster: [], teamOfWeek: [], rosterMovements: [], sanctions: [], playoffMatches: [], news: [], gallery: [], novaChampions: { settings: null, qualifiedTeams: [], matches: [], stats: [], history: [] }, championSpotlight: null, championHistory: [], settings: null })
+  const [data, setData] = useState({ divisions: [], seasonHistory: [], teams: [], players: [], matches: [], goals: [], events: [], cards: [], lineups: [], reports: [], matchRoster: [], captainAttendance: [], clarifications: [], venues: [], referees: [], matchAssignments: [], teamOfWeek: [], rosterMovements: [], sanctions: [], playoffMatches: [], news: [], gallery: [], novaChampions: { settings: null, qualifiedTeams: [], matches: [], stats: [], history: [] }, championSpotlight: null, championHistory: [], settings: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 

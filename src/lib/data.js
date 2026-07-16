@@ -1,7 +1,7 @@
 import { supabase, hasSupabaseConfig } from './supabase'
 import { mockCards, mockChampionHistory, mockChampionSpotlight, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockNovaChampionsHistory, mockNovaChampionsMatches, mockNovaChampionsQualifiedTeams, mockNovaChampionsSettings, mockNovaChampionsStats, mockPlayers, mockPlayoffMatches, mockPlayoffSettings, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
 
-const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'match_lineups', 'match_reports', 'match_roster', 'sanctions', 'playoff_matches', 'playoff_settings', 'news', 'gallery', 'user_profiles', 'team_of_week', 'roster_movements', 'nova_champions_settings', 'nova_champions_qualified_teams', 'nova_champions_matches', 'nova_champions_stats', 'nova_champions_champions_history', 'champion_spotlight', 'champion_history']
+const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'match_lineups', 'match_reports', 'match_roster', 'captain_attendance', 'clarification_requests', 'sanctions', 'venues', 'referees', 'match_assignments', 'playoff_matches', 'playoff_settings', 'news', 'gallery', 'user_profiles', 'team_of_week', 'roster_movements', 'nova_champions_settings', 'nova_champions_qualified_teams', 'nova_champions_matches', 'nova_champions_stats', 'nova_champions_champions_history', 'champion_spotlight', 'champion_history']
 
 export async function fetchLeagueData() {
   if (!hasSupabaseConfig) {
@@ -17,6 +17,11 @@ export async function fetchLeagueData() {
       lineups: [],
       reports: [],
       matchRoster: [],
+      captainAttendance: [],
+      clarifications: [],
+      venues: [],
+      referees: [],
+      matchAssignments: [],
       teamOfWeek: [],
       rosterMovements: [],
       sanctions: mockSanctions,
@@ -37,7 +42,7 @@ export async function fetchLeagueData() {
     }
   }
 
-  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, teamOfWeek, rosterMovements, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory, championSpotlight, championHistory] = await Promise.all([
+  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, captainAttendance, clarifications, venues, referees, matchAssignments, teamOfWeek, rosterMovements, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory, championSpotlight, championHistory] = await Promise.all([
     supabase.from('league_settings').select('*').eq('id', 1).maybeSingle(),
     supabase.from('divisions').select('*').order('level'),
     supabase.from('season_history').select('*').order('created_at', { ascending: false }),
@@ -50,6 +55,11 @@ export async function fetchLeagueData() {
     supabase.from('match_lineups').select('*').order('created_at'),
     supabase.from('match_reports').select('*').order('created_at', { ascending: false }),
     supabase.from('match_roster').select('*').order('confirmed_at', { ascending: false }),
+    safeOptionalQuery(supabase.from('captain_attendance').select('*').order('created_at', { ascending: false })),
+    safeOptionalQuery(supabase.from('clarification_requests').select('*').order('created_at', { ascending: false })),
+    safeOptionalQuery(supabase.from('venues').select('*').order('name')),
+    safeOptionalQuery(supabase.from('referees').select('*').order('full_name')),
+    safeOptionalQuery(supabase.from('match_assignments').select('*').order('created_at', { ascending: false })),
     safeOptionalQuery(supabase.from('team_of_week').select('*').order('round', { ascending: false })),
     safeOptionalQuery(supabase.from('roster_movements').select('*').order('created_at', { ascending: false })),
     supabase.from('sanctions').select('*').order('start_date', { ascending: false }),
@@ -66,7 +76,7 @@ export async function fetchLeagueData() {
     supabase.from('champion_history').select('*').order('created_at', { ascending: false }),
   ])
 
-  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, teamOfWeek, rosterMovements, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory, championSpotlight, championHistory].find((result) => result.error)?.error
+  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, captainAttendance, clarifications, venues, referees, matchAssignments, teamOfWeek, rosterMovements, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory, championSpotlight, championHistory].find((result) => result.error)?.error
   if (error) throw error
 
   return {
@@ -81,6 +91,11 @@ export async function fetchLeagueData() {
     lineups: lineups.data ?? [],
     reports: reports.data ?? [],
     matchRoster: matchRoster.data ?? [],
+    captainAttendance: captainAttendance.data ?? [],
+    clarifications: clarifications.data ?? [],
+    venues: venues.data ?? [],
+    referees: referees.data ?? [],
+    matchAssignments: matchAssignments.data ?? [],
     teamOfWeek: teamOfWeek.data ?? [],
     rosterMovements: rosterMovements.data ?? [],
     sanctions: sanctions.data ?? [],

@@ -23,6 +23,7 @@ import PlayerLoginPage from './pages/PlayerLoginPage'
 import MyPlayerProfilePage from './pages/MyPlayerProfilePage'
 import NovaIdPage from './pages/NovaIdPage'
 import NovaIdPublicProfilePage from './pages/NovaIdPublicProfilePage'
+import CaptainZonePage from './pages/CaptainZonePage'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import { useAuth } from './lib/AuthContext'
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/login" element={<PlayerLoginPage />} />
         <Route path="/perfil" element={<MyPlayerProfilePage league={league} />} />
         <Route path="/nova-id" element={<NovaIdPage league={league} />} />
+        <Route path="/capitan" element={<CaptainZonePage league={league} />} />
         <Route path="/nova-id/:novaId" element={<NovaIdPublicProfilePage league={publicLeague} />} />
         <Route path="/mi-perfil" element={<Navigate to="/perfil" replace />} />
       </Route>

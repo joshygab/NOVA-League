@@ -346,6 +346,32 @@ create table public.match_roster (
   unique (match_id, player_id)
 );
 
+create table public.captain_attendance (
+  id uuid primary key default gen_random_uuid(),
+  match_id uuid not null references public.matches(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  captain_player_id uuid references public.players(id) on delete set null,
+  status text not null default 'confirmed' check (status in ('confirmed', 'doubt', 'out')),
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (match_id, team_id)
+);
+
+create table public.clarification_requests (
+  id uuid primary key default gen_random_uuid(),
+  match_id uuid references public.matches(id) on delete set null,
+  team_id uuid references public.teams(id) on delete set null,
+  player_id uuid references public.players(id) on delete set null,
+  subject text not null,
+  explanation text not null,
+  evidence_url text,
+  status text not null default 'received' check (status in ('received', 'in_review', 'needs_info', 'approved', 'rejected', 'closed')),
+  resolution text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table public.player_ratings (
   player_id uuid primary key references public.players(id) on delete cascade,
   overall int not null default 50,
@@ -605,6 +631,8 @@ alter table public.match_reports enable row level security;
 alter table public.player_stats enable row level security;
 alter table public.match_roster enable row level security;
 alter table public.player_ratings enable row level security;
+alter table public.captain_attendance enable row level security;
+alter table public.clarification_requests enable row level security;
 alter table public.achievements enable row level security;
 alter table public.player_achievements enable row level security;
 alter table public.team_of_week enable row level security;
@@ -646,6 +674,8 @@ create policy "public read match lineups" on public.match_lineups for select usi
 create policy "public read match reports" on public.match_reports for select using (true);
 create policy "public read player stats" on public.player_stats for select using (true);
 create policy "public read match roster" on public.match_roster for select using (true);
+create policy "team captains read attendance" on public.captain_attendance for select using (true);
+create policy "team captains read clarifications" on public.clarification_requests for select using (auth.role() = 'authenticated' or public.is_admin());
 create policy "public read player ratings" on public.player_ratings for select using (true);
 create policy "public read achievements" on public.achievements for select using (true);
 create policy "public read player achievements" on public.player_achievements for select using (true);
@@ -685,6 +715,9 @@ create policy "admin write match reports" on public.match_reports for all using 
 create policy "admin write player stats" on public.player_stats for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write match roster" on public.match_roster for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write player ratings" on public.player_ratings for all using (public.is_admin()) with check (public.is_admin());
+create policy "team captains write attendance" on public.captain_attendance for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "team captains create clarifications" on public.clarification_requests for insert with check (auth.role() = 'authenticated');
+create policy "admin manage clarifications" on public.clarification_requests for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write achievements" on public.achievements for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write player achievements" on public.player_achievements for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write team of week" on public.team_of_week for all using (public.is_admin()) with check (public.is_admin());
@@ -753,6 +786,8 @@ alter publication supabase_realtime add table public.match_lineups;
 alter publication supabase_realtime add table public.match_reports;
 alter publication supabase_realtime add table public.player_stats;
 alter publication supabase_realtime add table public.match_roster;
+alter publication supabase_realtime add table public.captain_attendance;
+alter publication supabase_realtime add table public.clarification_requests;
 alter publication supabase_realtime add table public.player_ratings;
 alter publication supabase_realtime add table public.achievements;
 alter publication supabase_realtime add table public.player_achievements;

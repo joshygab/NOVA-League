@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveMatchAssignment, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveReferee, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, saveVenue, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import { hasPermission, permissions } from '../../lib/permissions'
@@ -27,6 +27,9 @@ const emptyChampionsStat = { match_id: '', team_id: '', player_id: '', stat_type
 const emptyChampionSpotlight = { is_active: false, display_mode: 'home_section', tournament_name: '', season_label: '', champion_team_id: '', champion_photo_url: '', championPhotoFile: null, message_title: '¡Felicidades, campeones!', message_body: 'Han conquistado la gloria de NOVA.' }
 const emptyRosterMovement = { player_id: '', from_team_id: '', to_team_id: '', movement_type: 'alta', reason: '', status: 'approved' }
 const emptyTeamOfWeek = { season_label: new Date().getFullYear().toString(), round: 1, slot: 'mvp', player_id: '', team_id: '', note: '' }
+const emptyVenue = { name: '', address: '', map_url: '', capacity: '', status: 'active', notes: '' }
+const emptyReferee = { full_name: '', phone: '', email: '', status: 'active', authorized_divisions: [] }
+const emptyAssignment = { match_id: '', referee_id: '', venue_id: '', assignment_status: 'pending', notes: '' }
 
 export default function AdminDashboard({ league }) {
   const [tab, setTab] = useState('dashboard')
@@ -109,6 +112,7 @@ export default function AdminDashboard({ league }) {
         {tab === 'aprobaciones' && <PlayerApprovals busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos-form' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'revisión de actas' && <MatchReviewAdmin busy={busy} run={run} league={league} />}
+        {tab === 'canchas y árbitros' && <VenuesRefereesAdmin busy={busy} run={run} league={league} />}
         {tab === 'acta digital' && <MatchSheetAdmin busy={busy} run={run} league={league} />}
         {tab === 'escáner nova id' && <NovaIdScannerAdmin busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
@@ -133,7 +137,7 @@ export default function AdminDashboard({ league }) {
 }
 
 function sectionForTool(tab) {
-  if (['partidos-form', 'revisión de actas', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
+  if (['partidos-form', 'revisión de actas', 'canchas y árbitros', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
   if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones', 'plantillas', 'equipo de la jornada'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
@@ -150,6 +154,7 @@ function adminTitle(tab) {
     sanciones: 'Sanciones',
     'acta digital': 'Captura de Partido',
     'revisión de actas': 'Revisión de Actas',
+    'canchas y árbitros': 'Canchas y Árbitros',
     'escáner nova id': 'Escáner NOVA ID',
     'nova champions cup': 'NOVA Champions Cup',
     'modo campeón': 'Modo Campeón',
@@ -329,6 +334,7 @@ function PartidosHub({ league, setTab }) {
         <AdminAction title="Acta digital" text="Capturar partido en vivo" onClick={() => setTab('acta digital')} />
         <AdminAction title="Revisar actas" text="Publicar oficial" onClick={() => setTab('revisión de actas')} />
         <AdminAction title="Crear partido" text="Calendario y resultados" onClick={() => setTab('partidos-form')} />
+        <AdminAction title="Canchas y árbitros" text="Asignaciones" onClick={() => setTab('canchas y árbitros')} />
         <AdminAction title="Escáner NOVA ID" text="Validar jugadores" onClick={() => setTab('escáner nova id')} />
         <AdminAction title="Playoffs" text="Liguilla por división" onClick={() => setTab('playoffs')} />
         <AdminAction title="Champions Cup" text="Activar y generar bracket" onClick={() => setTab('nova champions cup')} />
@@ -343,6 +349,74 @@ function PartidosHub({ league, setTab }) {
       </section>
     </section>
   )
+}
+
+function VenuesRefereesAdmin({ league, run, busy }) {
+  const [venueForm, setVenueForm] = useState(emptyVenue)
+  const [refereeForm, setRefereeForm] = useState(emptyReferee)
+  const [assignment, setAssignment] = useState(emptyAssignment)
+  const match = league.matches.find((item) => item.id === assignment.match_id)
+  const conflicts = match ? findAssignmentConflicts(match, assignment, league) : []
+
+  return (
+    <section className="space-y-6">
+      <div className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Calendario operativo</p>
+        <h2 className="mt-2 text-2xl font-black">Canchas, árbitros y asignaciones</h2>
+        <p className="mt-1 text-sm text-slate-400">Asigna cancha y árbitro antes de publicar jornadas.</p>
+      </div>
+
+      <section className="grid gap-6 lg:grid-cols-3">
+        <div className="panel space-y-4 p-5">
+          <h3 className="text-lg font-black">Canchas</h3>
+          <EntityPicker label="Editar cancha" items={league.venues || []} getLabel={(venue) => venue.name} onPick={(venue) => setVenueForm({ ...emptyVenue, ...venue, capacity: venue.capacity || '' })} />
+          <Field label="Nombre" value={venueForm.name} onChange={(name) => setVenueForm({ ...venueForm, name })} />
+          <Field label="Dirección" value={venueForm.address || ''} onChange={(address) => setVenueForm({ ...venueForm, address })} />
+          <Field label="Mapa" value={venueForm.map_url || ''} onChange={(map_url) => setVenueForm({ ...venueForm, map_url })} />
+          <Field label="Capacidad" value={venueForm.capacity || ''} onChange={(capacity) => setVenueForm({ ...venueForm, capacity })} />
+          <Select label="Estado" value={venueForm.status} onChange={(status) => setVenueForm({ ...venueForm, status })} options={[{ id: 'active', name: 'Activa' }, { id: 'maintenance', name: 'Mantenimiento' }, { id: 'inactive', name: 'Inactiva' }]} />
+          <Field label="Notas" value={venueForm.notes || ''} onChange={(notes) => setVenueForm({ ...venueForm, notes })} />
+          <button className="button" disabled={busy || !venueForm.name} onClick={() => run(() => saveVenue(venueForm), 'Cancha guardada')}>Guardar cancha</button>
+        </div>
+
+        <div className="panel space-y-4 p-5">
+          <h3 className="text-lg font-black">Árbitros</h3>
+          <EntityPicker label="Editar árbitro" items={league.referees || []} getLabel={(referee) => referee.full_name} onPick={(referee) => setRefereeForm({ ...emptyReferee, ...referee })} />
+          <Field label="Nombre completo" value={refereeForm.full_name} onChange={(full_name) => setRefereeForm({ ...refereeForm, full_name })} />
+          <Field label="Teléfono" value={refereeForm.phone || ''} onChange={(phone) => setRefereeForm({ ...refereeForm, phone })} />
+          <Field label="Correo" value={refereeForm.email || ''} onChange={(email) => setRefereeForm({ ...refereeForm, email })} />
+          <Select label="Estado" value={refereeForm.status} onChange={(status) => setRefereeForm({ ...refereeForm, status })} options={[{ id: 'active', name: 'Activo' }, { id: 'inactive', name: 'Inactivo' }, { id: 'suspended', name: 'Suspendido' }]} />
+          <button className="button" disabled={busy || !refereeForm.full_name} onClick={() => run(() => saveReferee(refereeForm), 'Árbitro guardado')}>Guardar árbitro</button>
+        </div>
+
+        <div className="panel space-y-4 p-5">
+          <h3 className="text-lg font-black">Asignar partido</h3>
+          <Select label="Partido" value={assignment.match_id} onChange={(match_id) => {
+            const current = (league.matchAssignments || []).find((item) => item.match_id === match_id)
+            setAssignment({ ...emptyAssignment, ...(current || {}), match_id })
+          }} options={league.matches.map((item) => ({ id: item.id, name: `J${item.round} ${league.teamsById.get(item.home_team_id)?.name || 'Local'} vs ${league.teamsById.get(item.away_team_id)?.name || 'Visitante'}` }))} />
+          <Select label="Cancha" value={assignment.venue_id} onChange={(venue_id) => setAssignment({ ...assignment, venue_id })} options={league.venues || []} />
+          <Select label="Árbitro" value={assignment.referee_id} onChange={(referee_id) => setAssignment({ ...assignment, referee_id })} options={(league.referees || []).map((item) => ({ id: item.id, name: item.full_name }))} />
+          <Select label="Estado" value={assignment.assignment_status} onChange={(assignment_status) => setAssignment({ ...assignment, assignment_status })} options={[{ id: 'pending', name: 'Pendiente' }, { id: 'accepted', name: 'Aceptada' }, { id: 'declined', name: 'Rechazada' }, { id: 'completed', name: 'Completada' }]} />
+          <Field label="Notas" value={assignment.notes || ''} onChange={(notes) => setAssignment({ ...assignment, notes })} />
+          {conflicts.length > 0 && <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{conflicts.map((item) => <p key={item}>{item}</p>)}</div>}
+          <button className="button" disabled={busy || !assignment.match_id} onClick={() => run(() => saveMatchAssignment(assignment), 'Asignación guardada')}>Guardar asignación</button>
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function findAssignmentConflicts(match, assignment, league) {
+  const conflicts = []
+  if (!match.match_date) return conflicts
+  const sameSlot = (other) => other.id !== match.id && other.match_date?.slice(0, 16) === match.match_date.slice(0, 16)
+  const sameVenueAssignments = (league.matchAssignments || []).filter((item) => item.match_id !== match.id && item.venue_id && item.venue_id === assignment.venue_id)
+  const sameRefereeAssignments = (league.matchAssignments || []).filter((item) => item.match_id !== match.id && item.referee_id && item.referee_id === assignment.referee_id)
+  if (assignment.venue_id && sameVenueAssignments.some((item) => sameSlot(league.matches.find((row) => row.id === item.match_id) || {}))) conflicts.push('Choque de cancha en el mismo horario.')
+  if (assignment.referee_id && sameRefereeAssignments.some((item) => sameSlot(league.matches.find((row) => row.id === item.match_id) || {}))) conflicts.push('El árbitro ya tiene partido en ese horario.')
+  if (league.matches.some((other) => sameSlot(other) && [other.home_team_id, other.away_team_id].some((teamId) => [match.home_team_id, match.away_team_id].includes(teamId)))) conflicts.push('Un equipo ya tiene partido en ese horario.')
+  return conflicts
 }
 
 function MatchReviewAdmin({ league, run, busy }) {
