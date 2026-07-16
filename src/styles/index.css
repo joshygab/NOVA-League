@@ -11,6 +11,7 @@
     margin: 0;
     min-width: 320px;
     overflow-x: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
     background:
       radial-gradient(circle at top left, rgba(11, 140, 255, 0.16), transparent 34rem),
       linear-gradient(135deg, #05070c 0%, #0b101a 48%, #05070c 100%);
@@ -71,5 +72,17 @@
 
   .button-secondary {
     @apply inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:border-gold/70 hover:text-gold;
+  }
+}
+
+@media (max-width: 480px) {
+  .button,
+  .button-secondary,
+  .input {
+    min-height: 48px;
+  }
+
+  .panel {
+    border-radius: 12px;
   }
 }

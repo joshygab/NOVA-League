@@ -38,7 +38,7 @@ const emptyNotification = { title: '', body: '', notification_type: 'general', a
 const emptyChampionsHistory = { season_id: new Date().getFullYear().toString(), champion_team_id: '', runner_up_team_id: '', final_score: '', final_mvp_player_id: '', top_scorer_player_id: '', best_goalkeeper_player_id: '' }
 
 export default function AdminDashboard({ league }) {
-  const [tab, setTab] = useState('dashboard')
+  const [tab, setTab] = useState(() => window.sessionStorage.getItem('nova-admin-tab') || 'dashboard')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const { role, signOut } = useAuth()
@@ -52,6 +52,17 @@ export default function AdminDashboard({ league }) {
     can(permissions.DISCIPLINE_MANAGE) && { id: 'sanciones', label: 'Sanciones', icon: ShieldAlert },
   ].filter(Boolean)
   const activeNav = navItems.some((item) => item.id === tab) ? tab : sectionForTool(tab)
+
+  useEffect(() => {
+    window.sessionStorage.setItem('nova-admin-tab', tab)
+  }, [tab])
+
+  function openRefereeMode(matchId = '') {
+    const memory = { matchId, step: matchId ? 'preparacion' : 'seleccion', updated_at: new Date().toISOString() }
+    window.sessionStorage.setItem('nova-referee-active-match', JSON.stringify(memory))
+    window.localStorage.setItem('nova-referee-active-match', JSON.stringify(memory))
+    navigate('/admin/arbitro')
+  }
 
   async function run(action, done = 'Guardado correctamente') {
     if (!hasSupabaseConfig) {
@@ -101,8 +112,8 @@ export default function AdminDashboard({ league }) {
 
           {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
-          {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} run={run} busy={busy} can={can} />}
-        {tab === 'partidos' && <PartidosHub league={league} setTab={setTab} />}
+          {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} run={run} busy={busy} can={can} openRefereeMode={openRefereeMode} />}
+        {tab === 'partidos' && <PartidosHub league={league} setTab={setTab} openRefereeMode={openRefereeMode} />}
         {tab === 'equipos' && <EquiposHub league={league} setTab={setTab} run={run} busy={busy} />}
         {tab === 'jugadores' && <JugadoresHub league={league} setTab={setTab} run={run} busy={busy} />}
         {tab === 'sanciones' && <SancionesHub league={league} setTab={setTab} run={run} busy={busy} />}
@@ -183,7 +194,7 @@ function adminTitle(tab) {
   return titles[tab] || tab
 }
 
-function AdminSummary({ league, setTab, run, busy, can }) {
+function AdminSummary({ league, setTab, run, busy, can, openRefereeMode }) {
   const pending = league.players.filter((player) => player.approval_status === 'pending').length
   const inReview = league.matches.filter((match) => match.status === 'played').length
   const sanctions = league.sanctions.filter((sanction) => sanction.status === 'active').length
@@ -231,8 +242,8 @@ function AdminSummary({ league, setTab, run, busy, can }) {
           <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Próximo partido</p>
           {nextMatch ? (
             <div className="mt-4 space-y-4">
-              <AdminMatchCard match={nextMatch} league={league} onStart={can(permissions.MATCH_CAPTURE) ? () => setTab('acta digital') : null} />
-              <p className="text-sm text-slate-400">Abre el acta digital cuando el árbitro esté listo para confirmar jugadores.</p>
+              <AdminMatchCard match={nextMatch} league={league} onStart={can(permissions.MATCH_CAPTURE) ? () => openRefereeMode(nextMatch.id) : null} />
+              <p className="text-sm text-slate-400">Abre la captura rápida cuando el árbitro esté listo para confirmar jugadores.</p>
             </div>
           ) : (
             <p className="mt-4 text-sm text-slate-400">No hay próximos partidos programados.</p>
@@ -241,8 +252,8 @@ function AdminSummary({ league, setTab, run, busy, can }) {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />}
-        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Modo Árbitro" text="Reloj y pase QR" onClick={() => navigate('/admin/arbitro')} />}
+        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Iniciar partido" text="Captura rápida mejorada" onClick={() => openRefereeMode()} />}
+        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Acta clásica" text="Captura administrativa" onClick={() => setTab('acta digital')} />}
         {can(permissions.MATCH_REVIEW) && <AdminAction title="Revisar actas" text="Publicar resultado oficial" onClick={() => setTab('revisión de actas')} />}
         {can(permissions.MATCH_REVIEW) && <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos-form')} />}
         {can(permissions.PLAYERS_MANAGE) && <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />}
@@ -274,7 +285,7 @@ function AdminSummary({ league, setTab, run, busy, can }) {
         </div>
         <div className="grid gap-3">
           {todayMatches.length === 0 && <p className="text-sm text-slate-400">No hay partidos programados hoy.</p>}
-          {todayMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={can(permissions.MATCH_CAPTURE) ? () => setTab('acta digital') : null} />)}
+          {todayMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={can(permissions.MATCH_CAPTURE) ? () => openRefereeMode(match.id) : null} />)}
         </div>
       </section>
     </div>
@@ -343,14 +354,15 @@ function AdminMatchCard({ match, league, onStart }) {
   )
 }
 
-function PartidosHub({ league, setTab }) {
+function PartidosHub({ league, setTab, openRefereeMode }) {
   const today = new Date().toISOString().slice(0, 10)
   const matches = league.matches.filter((match) => match.match_date?.slice(0, 10) === today)
   const visibleMatches = matches.length ? matches : league.matches.slice(0, 8)
   return (
     <section className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminAction title="Acta digital" text="Capturar partido en vivo" onClick={() => setTab('acta digital')} />
+        <AdminAction title="Captura rápida" text="Modo Árbitro mejorado" onClick={() => openRefereeMode()} />
+        <AdminAction title="Acta clásica" text="Captura administrativa" onClick={() => setTab('acta digital')} />
         <AdminAction title="Revisar actas" text="Publicar oficial" onClick={() => setTab('revisión de actas')} />
         <AdminAction title="Crear partido" text="Calendario y resultados" onClick={() => setTab('partidos-form')} />
         <AdminAction title="Canchas y árbitros" text="Asignaciones" onClick={() => setTab('canchas y árbitros')} />
@@ -360,9 +372,9 @@ function PartidosHub({ league, setTab }) {
       </div>
       <section className="panel p-5">
         <h2 className="text-xl font-black">¿Qué partido vas a capturar?</h2>
-        <p className="mt-1 text-sm text-slate-400">Elige una tarjeta y abre el acta digital para empezar rápido.</p>
+        <p className="mt-1 text-sm text-slate-400">Elige una tarjeta y abre la captura rápida del partido.</p>
         <div className="mt-4 grid gap-3">
-          {visibleMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={() => setTab('acta digital')} />)}
+          {visibleMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={() => openRefereeMode(match.id)} />)}
           {visibleMatches.length === 0 && <p className="text-sm text-slate-400">Crea un partido para iniciar la captura.</p>}
         </div>
       </section>

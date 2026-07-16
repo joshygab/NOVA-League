@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
-import { Camera, CheckCircle, Clock, Pause, Play, Search, ShieldAlert, TimerReset, Undo2, Wifi, WifiOff } from 'lucide-react'
+import { Camera, CheckCircle, Clock, FileText, Pause, Play, Search, ShieldAlert, TimerReset, Undo2, Wifi, WifiOff } from 'lucide-react'
 import Badge from '../../components/Badge'
 import Crest from '../../components/Crest'
 import PlayerAvatar from '../../components/PlayerAvatar'
-import { saveRefereeAttendance, saveRefereeMatchEvent, updateMatchLiveState, voidRefereeMatchEvent } from '../../lib/adminApi'
+import { finalizeDigitalMatch, saveRefereeAttendance, saveRefereeMatchEvent, updateMatchLiveState, voidRefereeMatchEvent } from '../../lib/adminApi'
 import { useAuth } from '../../lib/AuthContext'
 import { roles } from '../../lib/auth'
 import { parseNovaId, playerNovaId, playerStatus } from '../../lib/novaId'
@@ -15,19 +15,25 @@ import { hasSupabaseConfig } from '../../lib/supabase'
 const filters = ['Hoy', 'Próximos', 'En vivo', 'Pendientes', 'Finalizados']
 const periods = ['1T', 'Descanso', '2T', 'Finalizado', 'Suspendido']
 const defaultTimer = { period: '1T', started_at: null, paused_at: null, accumulated_seconds: 0, running: false, stoppage_seconds: 0 }
+const refereeMemoryKey = 'nova-referee-active-match'
 
 export default function RefereeModePage({ league }) {
   const auth = useAuth()
   const [filter, setFilter] = useState('Hoy')
   const [manualCode, setManualCode] = useState('')
-  const [selectedId, setSelectedId] = useState('')
-  const [step, setStep] = useState('seleccion')
+  const [selectedId, setSelectedId] = useState(() => readRefereeMemory().matchId || '')
+  const [step, setStep] = useState(() => readRefereeMemory().step || 'seleccion')
   const [online, setOnline] = useState(navigator.onLine)
   const [message, setMessage] = useState('')
   const canOpenAll = ['admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin'].includes(auth.role)
   const referee = findRefereeForUser(league, auth)
   const assignedMatches = useMemo(() => getAssignedMatches({ league, referee, canOpenAll, filter }), [league, referee, canOpenAll, filter])
   const selectedMatch = league.matches.find((match) => match.id === selectedId)
+  const rememberedMatch = league.matches.find((match) => match.id === readRefereeMemory().matchId && !['played', 'official'].includes(match.status))
+
+  useEffect(() => {
+    if (selectedId) writeRefereeMemory({ matchId: selectedId, step })
+  }, [selectedId, step])
 
   useEffect(() => {
     async function syncBack() {
@@ -82,6 +88,7 @@ export default function RefereeModePage({ league }) {
           <MatchSelection
             league={league}
             matches={assignedMatches}
+            rememberedMatch={rememberedMatch}
             filter={filter}
             setFilter={setFilter}
             manualCode={manualCode}
@@ -118,9 +125,17 @@ export default function RefereeModePage({ league }) {
   )
 }
 
-function MatchSelection({ league, matches, filter, setFilter, manualCode, setManualCode, openManualCode, openMatch, referee, canOpenAll }) {
+function MatchSelection({ league, matches, rememberedMatch, filter, setFilter, manualCode, setManualCode, openManualCode, openMatch, referee, canOpenAll }) {
   return (
     <section className="space-y-5">
+      {rememberedMatch && (
+        <div className="rounded-lg border border-gold/40 bg-gold/10 p-4 shadow-gold">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Recuperación</p>
+          <h2 className="mt-1 text-xl font-black">Continuar partido activo</h2>
+          <p className="mt-1 text-sm text-slate-300">Tienes un partido guardado en este dispositivo.</p>
+          <button className="button mt-3 w-full" onClick={() => openMatch(rememberedMatch.id)}>Continuar partido</button>
+        </div>
+      )}
       <div className="panel p-4">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {filters.map((item) => <button key={item} className={filter === item ? 'button whitespace-nowrap' : 'button-secondary whitespace-nowrap'} onClick={() => setFilter(item)}>{item}</button>)}
@@ -339,6 +354,9 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
   const [queueRows, setQueueRows] = useState(readOfflineQueue())
   const [syncing, setSyncing] = useState(false)
   const [liveScore, setLiveScore] = useState({ home: Number(match.home_score_live ?? match.home_score ?? 0), away: Number(match.away_score_live ?? match.away_score ?? 0) })
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [finalForm, setFinalForm] = useState({ mvp_player_id: '', observations: '', referee_signature: '', home_captain_signature: '', away_captain_signature: '' })
+  const [submittingReport, setSubmittingReport] = useState(false)
   const home = league.teamsById.get(match.home_team_id)
   const away = league.teamsById.get(match.away_team_id)
   const elapsed = currentElapsed(timer, now)
@@ -360,6 +378,16 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
   useEffect(() => {
     window.localStorage.setItem(timerKey(match.id), JSON.stringify(timer))
   }, [match.id, timer])
+
+  useEffect(() => {
+    function warnBeforeExit(event) {
+      if (!timer.running && pendingForMatch.length === 0) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeExit)
+    return () => window.removeEventListener('beforeunload', warnBeforeExit)
+  }, [timer.running, pendingForMatch.length])
 
   useEffect(() => {
     function refreshQueue() {
@@ -484,6 +512,59 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
     league.reload?.()
   }
 
+  async function sendToReview() {
+    if (!window.confirm('¿Enviar acta a revisión administrativa? Ya no deberías editar libremente este partido.')) return
+    setSubmittingReport(true)
+    const result = await finalizeDigitalMatch({
+      match,
+      score: liveScore,
+      report: {
+        referee_name: 'Árbitro',
+        observations: finalForm.observations,
+        mvp_player_id: finalForm.mvp_player_id || null,
+        referee_signature: finalForm.referee_signature,
+        home_captain_signature: finalForm.home_captain_signature,
+        away_captain_signature: finalForm.away_captain_signature,
+        report_data: {
+          timer,
+          referee_mode: true,
+          mvp_player_id: finalForm.mvp_player_id || null,
+          live_score: liveScore,
+          event_count: allEvents.length,
+        },
+      },
+    })
+    setSubmittingReport(false)
+    if (result.error) {
+      setMessage(result.error.message)
+      return
+    }
+    writeRefereeMemory({ matchId: '', step: 'seleccion' })
+    setMessage('Acta enviada a revisión. El administrador podrá aprobar el resultado oficial.')
+    league.reload?.()
+  }
+
+  async function adjustLiveScore(team, delta) {
+    const nextScore = {
+      home: team === 'home' ? Math.max(0, liveScore.home + delta) : liveScore.home,
+      away: team === 'away' ? Math.max(0, liveScore.away + delta) : liveScore.away,
+    }
+    setLiveScore(nextScore)
+    const patch = {
+      status: 'in_progress',
+      home_score_live: nextScore.home,
+      away_score_live: nextScore.away,
+    }
+    if (!online || !hasSupabaseConfig) {
+      queueOfflineAction({ type: 'match_live_state', dedupe_key: `${match.id}-manual-score-${Date.now()}`, payload: { matchId: match.id, patch, reason: 'manual_score_adjustment' } })
+      setMessage('Marcador corregido en este dispositivo. Se sincronizará al volver internet.')
+      return
+    }
+    const result = await updateMatchLiveState(match.id, patch, 'manual_score_adjustment')
+    setMessage(result.error ? result.error.message : `Marcador provisional actualizado ${nextScore.home}-${nextScore.away}.`)
+    league.reload?.()
+  }
+
   return (
     <section className="space-y-4">
       <button className="button-secondary" onClick={onBack}>Volver a preparación</button>
@@ -530,12 +611,38 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
           <button className="button-secondary min-h-16 text-base" disabled={busyEvent} onClick={() => setAction('card')}>🟨 Tarjeta</button>
           <button className="button-secondary min-h-16 text-base" disabled={busyEvent} onClick={() => setAction('substitution')}>🔁 Cambio</button>
           <button className="button-secondary min-h-16 text-base" disabled={!lastEvent} onClick={undoLastEvent}><Undo2 size={18} />Deshacer</button>
+          <button className="button col-span-2 min-h-16 text-base" onClick={() => setReviewOpen(true)}><FileText size={18} />Finalizar y revisar acta</button>
+        </div>
+      </div>
+
+      <div className="panel p-4">
+        <h2 className="text-xl font-black">Ajustar marcador</h2>
+        <p className="mt-1 text-sm text-slate-400">Úsalo para corregir el resultado provisional sin salir del partido.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <ScoreAdjuster team={home} score={liveScore.home} onMinus={() => adjustLiveScore('home', -1)} onPlus={() => adjustLiveScore('home', 1)} />
+          <ScoreAdjuster team={away} score={liveScore.away} onMinus={() => adjustLiveScore('away', -1)} onPlus={() => adjustLiveScore('away', 1)} />
         </div>
       </div>
 
       {action === 'goal' && <GoalSheet match={match} teams={[home, away]} players={availablePlayers} onCancel={() => setAction('')} onSave={registerEvent} />}
       {action === 'card' && <CardSheet match={match} teams={[home, away]} players={availablePlayers} events={allEvents} onCancel={() => setAction('')} onSave={registerEvent} />}
       {action === 'substitution' && <SubstitutionSheet match={match} teams={[home, away]} players={availablePlayers} onCancel={() => setAction('')} onSave={registerEvent} />}
+      {reviewOpen && (
+        <RefereeReviewStep
+          events={allEvents}
+          finalForm={finalForm}
+          league={league}
+          match={match}
+          onCancel={() => setReviewOpen(false)}
+          onChange={setFinalForm}
+          onSubmit={sendToReview}
+          players={availablePlayers}
+          score={liveScore}
+          submitting={submittingReport}
+          teams={[home, away]}
+          timer={timer}
+        />
+      )}
 
       <EventTimeline events={allEvents.slice(-8).reverse()} league={league} />
     </section>
@@ -559,10 +666,9 @@ function GoalSheet({ match, teams, players, onCancel, onSave }) {
         <option value="own_goal">Autogol</option>
         <option value="unknown">Gol sin autor identificado</option>
       </select>
-      <select className="input" value={assistId} onChange={(event) => setAssistId(event.target.value)}>
-        <option value="">Sin asistencia</option>
-        {teamPlayers.filter((player) => player.id !== playerId).map((player) => <option key={player.id} value={player.id}>#{player.number || '--'} {player.name}</option>)}
-      </select>
+      <p className="text-sm font-bold text-slate-300">Asistencia opcional</p>
+      <button className={!assistId ? 'button w-full' : 'button-secondary w-full'} onClick={() => setAssistId('')}>Sin asistencia</button>
+      <PlayerGrid players={teamPlayers.filter((player) => player.id !== playerId)} value={assistId} onChange={setAssistId} compact />
       <button className="button min-h-14 w-full" disabled={!teamId || (!playerId && goalType !== 'unknown')} onClick={() => onSave({ event_type: 'goal', team_id: teamId, player_id: playerId || null, related_player_id: assistId || null, detail: goalType, metadata: { goal_type: goalType } })}>Guardar gol</button>
     </ActionPanel>
   )
@@ -634,16 +740,178 @@ function TeamChoice({ teams, value, onChange }) {
 }
 
 function PlayerGrid({ players, value, onChange }) {
+  const [query, setQuery] = useState('')
+  const normalized = query.trim().toLowerCase()
+  const rows = players.filter((player) => {
+    if (!normalized) return true
+    return `${player.number || ''} ${player.name || ''} ${player.position || ''}`.toLowerCase().includes(normalized)
+  })
   return (
-    <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
-      {players.map((player) => (
-        <button key={player.id} className={`rounded-lg border p-3 text-left ${value === player.id ? 'border-gold bg-gold/15' : 'border-white/10 bg-white/5'}`} onClick={() => onChange(player.id)}>
-          <div className="flex items-center gap-3">
-            <PlayerAvatar src={player.photo_url} name={player.name} size="sm" />
-            <span className="font-black">#{player.number || '--'} {player.name}</span>
-          </div>
-        </button>
-      ))}
+    <div className="space-y-2">
+      <input className="input" placeholder="Nombre o número del jugador" value={query} onChange={(event) => setQuery(event.target.value)} />
+      <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
+        {rows.map((player) => (
+          <button key={player.id} className={`rounded-lg border p-3 text-left ${value === player.id ? 'border-gold bg-gold/15' : 'border-white/10 bg-white/5'}`} onClick={() => onChange(player.id)}>
+            <div className="flex items-center gap-3">
+              <PlayerAvatar src={player.photo_url} name={player.name} size="sm" />
+              <span className="font-black">#{player.number || '--'} {player.name}</span>
+            </div>
+          </button>
+        ))}
+        {rows.length === 0 && <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm text-slate-400">No encontramos jugadores con ese nombre o número.</p>}
+      </div>
+    </div>
+  )
+}
+
+function RefereeReviewStep({ events, finalForm, league, match, onCancel, onChange, onSubmit, players, score, submitting, teams, timer }) {
+  const home = teams[0]
+  const away = teams[1]
+  const goals = events.filter((event) => event.event_type === 'goal')
+  const cards = events.filter((event) => ['yellow_card', 'second_yellow', 'red_card'].includes(event.event_type))
+  const substitutions = events.filter((event) => event.event_type === 'substitution')
+
+  function update(field, value) {
+    onChange((current) => ({ ...current, [field]: value }))
+  }
+
+  return (
+    <section className="rounded-lg border border-gold/40 bg-black p-4 shadow-gold">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Paso final</p>
+          <h2 className="text-2xl font-black">Revisar acta</h2>
+        </div>
+        <button className="button-secondary" onClick={onCancel}>Volver al partido</button>
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-center">
+        <p className="text-sm text-slate-400">Resultado provisional</p>
+        <p className="mt-1 text-3xl font-black text-gold">{home?.name} {score.home} - {score.away} {away?.name}</p>
+        <p className="mt-1 text-xs text-slate-400">Periodo: {timer.period} · Tiempo registrado: {formatClock(Number(timer.accumulated_seconds || 0))}</p>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <SummaryCard title="Goles" rows={goals} league={league} empty="Sin goles registrados" />
+        <SummaryCard title="Tarjetas" rows={cards} league={league} empty="Sin tarjetas registradas" />
+        <SummaryCard title="Cambios" rows={substitutions} league={league} empty="Sin cambios registrados" />
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <div>
+          <p className="mb-2 text-sm font-bold text-slate-300">MVP del partido</p>
+          <PlayerGrid players={players} value={finalForm.mvp_player_id} onChange={(value) => update('mvp_player_id', value)} />
+        </div>
+        <textarea className="input min-h-28" placeholder="Observaciones arbitrales" value={finalForm.observations} onChange={(event) => update('observations', event.target.value)} />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <SignaturePad title="Firma capitán local" value={finalForm.home_captain_signature} onChange={(value) => update('home_captain_signature', value)} />
+        <SignaturePad title="Firma capitán visitante" value={finalForm.away_captain_signature} onChange={(value) => update('away_captain_signature', value)} />
+        <SignaturePad title="Firma árbitro" value={finalForm.referee_signature} onChange={(value) => update('referee_signature', value)} />
+      </div>
+
+      <div className="sticky bottom-3 mt-5 grid gap-2 rounded-lg border border-white/10 bg-black/95 p-3 sm:grid-cols-2">
+        <button className="button-secondary min-h-14" onClick={onCancel}>Guardar y seguir editando</button>
+        <button className="button min-h-14" disabled={submitting} onClick={onSubmit}>{submitting ? 'Enviando...' : 'Enviar acta a revisión'}</button>
+      </div>
+    </section>
+  )
+}
+
+function SummaryCard({ title, rows, league, empty }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <h3 className="font-black text-gold">{title}</h3>
+      <div className="mt-2 space-y-2">
+        {rows.map((event) => (
+          <p key={event.id || event.client_event_id} className="text-sm text-slate-200">
+            <span className="font-black">{event.minute || Math.ceil((event.match_second || 0) / 60)}'</span> {eventIcon(event.event_type)} {league.playersById.get(event.player_id)?.name || event.detail || 'Sin jugador'}
+          </p>
+        ))}
+        {rows.length === 0 && <p className="text-sm text-slate-500">{empty}</p>}
+      </div>
+    </div>
+  )
+}
+
+function SignaturePad({ title, value, onChange }) {
+  const canvasRef = useRef(null)
+  const drawingRef = useRef(false)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !value) return
+    const context = canvas.getContext('2d')
+    const image = new Image()
+    image.onload = () => context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    image.src = value
+  }, [value])
+
+  function point(event) {
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const touch = event.touches?.[0]
+    return {
+      x: (touch ? touch.clientX : event.clientX) - rect.left,
+      y: (touch ? touch.clientY : event.clientY) - rect.top,
+    }
+  }
+
+  function start(event) {
+    event.preventDefault()
+    drawingRef.current = true
+    const canvas = canvasRef.current
+    const context = canvas.getContext('2d')
+    const pos = point(event)
+    context.strokeStyle = '#f6c453'
+    context.lineWidth = 3
+    context.lineCap = 'round'
+    context.beginPath()
+    context.moveTo(pos.x, pos.y)
+  }
+
+  function move(event) {
+    if (!drawingRef.current) return
+    event.preventDefault()
+    const canvas = canvasRef.current
+    const context = canvas.getContext('2d')
+    const pos = point(event)
+    context.lineTo(pos.x, pos.y)
+    context.stroke()
+  }
+
+  function end() {
+    if (!drawingRef.current) return
+    drawingRef.current = false
+    onChange(canvasRef.current.toDataURL('image/png'))
+  }
+
+  function clear() {
+    const canvas = canvasRef.current
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height)
+    onChange('')
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="font-black">{title}</p>
+        <button className="button-secondary px-3 py-1 text-xs" onClick={clear}>Limpiar</button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width="420"
+        height="180"
+        className="h-36 w-full touch-none rounded-lg border border-gold/30 bg-black"
+        onMouseDown={start}
+        onMouseMove={move}
+        onMouseUp={end}
+        onMouseLeave={end}
+        onTouchStart={start}
+        onTouchMove={move}
+        onTouchEnd={end}
+      />
     </div>
   )
 }
@@ -666,6 +934,22 @@ function TeamMini({ team, align = 'left' }) {
 
 function ScoreTeam({ team, score }) {
   return <div className="min-w-0"><Crest src={team?.crest_url} name={team?.name} size="md" /><p className="mt-2 truncate text-sm font-black">{team?.name}</p><p className="text-5xl font-black">{score}</p></div>
+}
+
+function ScoreAdjuster({ team, score, onMinus, onPlus }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="mb-3 flex items-center gap-2">
+        <Crest src={team?.crest_url} name={team?.name} size="sm" />
+        <p className="truncate font-black">{team?.name}</p>
+      </div>
+      <div className="grid grid-cols-[56px_1fr_56px] items-center gap-2">
+        <button className="button-secondary min-h-14 text-xl" onClick={onMinus}>-</button>
+        <p className="text-center text-4xl font-black text-gold">{score}</p>
+        <button className="button min-h-14 text-xl" onClick={onPlus}>+</button>
+      </div>
+    </div>
+  )
 }
 
 function RosterSummary({ team, league, match }) {
@@ -759,6 +1043,20 @@ function formatClock(seconds) {
 
 function timerKey(matchId) {
   return `nova-referee-timer-${matchId}`
+}
+
+function readRefereeMemory() {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(refereeMemoryKey) || window.localStorage.getItem(refereeMemoryKey) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function writeRefereeMemory(value) {
+  const next = { ...readRefereeMemory(), ...value, updated_at: new Date().toISOString() }
+  window.sessionStorage.setItem(refereeMemoryKey, JSON.stringify(next))
+  window.localStorage.setItem(refereeMemoryKey, JSON.stringify(next))
 }
 
 function deviceId() {

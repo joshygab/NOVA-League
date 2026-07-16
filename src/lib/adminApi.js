@@ -454,6 +454,9 @@ export async function saveRefereeMatchEvent({ match, event, liveScore }) {
   const eventResult = await insertMatchEventWithSchemaFallback(payload)
   if (eventResult.error) return eventResult
 
+  const projectionResult = await projectRefereeEventToMatchSheet({ match, event: { ...event, id: eventResult.data.id } })
+  if (projectionResult.error) return projectionResult
+
   const scorePatch = {
     status: 'in_progress',
     home_score_live: Number(liveScore?.home ?? previousMatch?.home_score_live ?? previousMatch?.home_score ?? 0),
@@ -472,6 +475,50 @@ export async function saveRefereeMatchEvent({ match, event, liveScore }) {
 
   await logAudit({ action: 'create_referee_event', module: 'referee_mode', entityTable: 'match_events', entityId: eventResult.data.id, newValue: { event: eventResult.data, liveScore: scorePatch } })
   return eventResult
+}
+
+async function projectRefereeEventToMatchSheet({ match, event }) {
+  if (event.event_type === 'goal') {
+    if (!event.player_id) return { error: null }
+    const goalType = ['open_play', 'penalty', 'free_kick', 'header', 'own_goal'].includes(event.metadata?.goal_type)
+      ? event.metadata.goal_type
+      : 'open_play'
+    return saveGoal({
+      division_id: match.division_id,
+      match_id: match.id,
+      team_id: event.team_id,
+      player_id: event.player_id,
+      minute: event.minute || 0,
+      goal_type: goalType,
+      assist_player_id: event.related_player_id || '',
+    })
+  }
+
+  if (['yellow_card', 'second_yellow', 'red_card'].includes(event.event_type)) {
+    const cardType = event.event_type === 'yellow_card' ? 'yellow' : event.event_type === 'second_yellow' ? 'double_yellow' : 'red'
+    return saveCard({
+      division_id: match.division_id,
+      match_id: match.id,
+      team_id: event.team_id,
+      player_id: event.player_id,
+      type: cardType,
+      minute: event.minute || 0,
+      reason: event.metadata?.reason || event.detail || '',
+    })
+  }
+
+  if (event.event_type === 'substitution') {
+    return saveEvent({
+      division_id: match.division_id,
+      match_id: match.id,
+      team_id: event.team_id,
+      player_id: event.player_id,
+      type: 'substitution',
+      minute: event.minute || 0,
+    })
+  }
+
+  return { error: null }
 }
 
 async function insertMatchEventWithSchemaFallback(payload) {
@@ -1228,6 +1275,7 @@ export async function finalizeDigitalMatch({ match, report, score }) {
   const matchResult = await supabase.from('matches').update({
     home_score: Number(score.home),
     away_score: Number(score.away),
+    mvp_player_id: report.mvp_player_id || match.mvp_player_id || null,
     status: 'played',
     venue: report.venue || match.venue || null,
     observations: report.observations || match.observations || null,
