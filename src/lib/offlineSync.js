@@ -4,7 +4,9 @@ import { readOfflineQueue, removeOfflineAction, updateOfflineAction } from './of
 export async function syncOfflineQueue() {
   if (!navigator.onLine) return { synced: 0, failed: readOfflineQueue().length, error: 'Sin conexión.' }
 
-  const rows = readOfflineQueue().filter((item) => item.status !== 'syncing')
+  const rows = readOfflineQueue()
+    .filter((item) => item.status !== 'syncing')
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   let synced = 0
   let failed = 0
 
@@ -13,7 +15,9 @@ export async function syncOfflineQueue() {
     const result = await syncOfflineAction(item)
     if (result.error) {
       failed += 1
-      updateOfflineAction(item.id, { status: 'pending', last_error: result.error.message || 'No se pudo sincronizar.' })
+      const message = result.error.message || 'No se pudo sincronizar.'
+      const conflict = /duplicate|unique|version|conflict/i.test(message)
+      updateOfflineAction(item.id, { status: conflict ? 'conflict' : 'pending', last_error: message })
     } else {
       synced += 1
       removeOfflineAction(item.id)

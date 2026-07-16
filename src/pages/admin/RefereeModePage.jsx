@@ -8,7 +8,7 @@ import { saveRefereeAttendance, saveRefereeMatchEvent, updateMatchLiveState, voi
 import { useAuth } from '../../lib/AuthContext'
 import { roles } from '../../lib/auth'
 import { parseNovaId, playerNovaId, playerStatus } from '../../lib/novaId'
-import { queueOfflineAction, readOfflineQueue } from '../../lib/offlineQueue'
+import { queueOfflineAction, readOfflineMatchSnapshot, readOfflineQueue, saveOfflineMatchSnapshot } from '../../lib/offlineQueue'
 import { syncOfflineQueue } from '../../lib/offlineSync'
 import { hasSupabaseConfig } from '../../lib/supabase'
 
@@ -336,6 +336,8 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
   const [action, setAction] = useState('')
   const [busyEvent, setBusyEvent] = useState(false)
   const [localEvents, setLocalEvents] = useState([])
+  const [queueRows, setQueueRows] = useState(readOfflineQueue())
+  const [syncing, setSyncing] = useState(false)
   const [liveScore, setLiveScore] = useState({ home: Number(match.home_score_live ?? match.home_score ?? 0), away: Number(match.away_score_live ?? match.away_score ?? 0) })
   const home = league.teamsById.get(match.home_team_id)
   const away = league.teamsById.get(match.away_team_id)
@@ -348,6 +350,7 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
     .filter((event) => !event.is_voided)
     .sort((a, b) => Number(a.match_second || a.minute || 0) - Number(b.match_second || b.minute || 0))
   const lastEvent = [...allEvents].reverse()[0]
+  const pendingForMatch = queueRows.filter((item) => item.payload?.match?.id === match.id || item.payload?.matchId === match.id || item.payload?.event?.match_id === match.id)
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
@@ -357,6 +360,32 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
   useEffect(() => {
     window.localStorage.setItem(timerKey(match.id), JSON.stringify(timer))
   }, [match.id, timer])
+
+  useEffect(() => {
+    function refreshQueue() {
+      setQueueRows(readOfflineQueue())
+    }
+    window.addEventListener('nova-offline-queue', refreshQueue)
+    window.addEventListener('storage', refreshQueue)
+    return () => {
+      window.removeEventListener('nova-offline-queue', refreshQueue)
+      window.removeEventListener('storage', refreshQueue)
+    }
+  }, [])
+
+  function downloadMatch() {
+    saveOfflineMatchSnapshot(match.id, { match, teams: [home, away], players: matchPlayers, roster: presentRows, timer, score: liveScore })
+    setMessage('Partido guardado en este dispositivo para trabajar con conexión inestable.')
+  }
+
+  async function syncNow() {
+    setSyncing(true)
+    const result = await syncOfflineQueue()
+    setSyncing(false)
+    setQueueRows(readOfflineQueue())
+    setMessage(`${result.synced} sincronizado(s), ${result.failed} pendiente(s).`)
+    league.reload?.()
+  }
 
   async function commit(next, reason) {
     setTimer(next)
@@ -369,7 +398,7 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
       stoppage_seconds: next.stoppage_seconds,
     }
     if (!online || !hasSupabaseConfig) {
-      queueOfflineAction({ type: 'match_live_state', payload: { matchId: match.id, patch, reason } })
+      queueOfflineAction({ type: 'match_live_state', dedupe_key: `${match.id}-${reason}-${Date.now()}`, payload: { matchId: match.id, patch, reason } })
       setMessage('Cronómetro guardado en este dispositivo.')
       return
     }
@@ -423,7 +452,7 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
     setAction('')
 
     if (!online || !hasSupabaseConfig) {
-      queueOfflineAction({ type: 'referee_match_event', payload })
+      queueOfflineAction({ type: 'referee_match_event', dedupe_key: clientEventId, payload })
       setMessage(`${eventLabel(event.event_type)} guardado en el dispositivo.`)
       setBusyEvent(false)
       return
@@ -446,7 +475,7 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
     setLiveScore(nextScore)
     setLocalEvents((rows) => rows.map((row) => row.id === lastEvent.id ? { ...row, is_voided: true, void_reason: reason } : row))
     if (String(lastEvent.id).length < 30 || !online || !hasSupabaseConfig) {
-      queueOfflineAction({ type: 'void_referee_match_event', payload: { match, event: lastEvent, liveScore: nextScore, reason } })
+      queueOfflineAction({ type: 'void_referee_match_event', dedupe_key: `void-${lastEvent.client_event_id || lastEvent.id}`, payload: { match, event: lastEvent, liveScore: nextScore, reason } })
       setMessage('Evento marcado para deshacer al sincronizar.')
       return
     }
@@ -458,6 +487,15 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
   return (
     <section className="space-y-4">
       <button className="button-secondary" onClick={onBack}>Volver a preparación</button>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <button className="button-secondary" onClick={downloadMatch}>Guardar offline</button>
+        <button className="button-secondary" disabled={!online || syncing || pendingForMatch.length === 0} onClick={syncNow}>
+          {syncing ? 'Sincronizando...' : `Sincronizar (${pendingForMatch.length})`}
+        </button>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-sm">
+          {pendingForMatch.length ? `${pendingForMatch.length} pendiente(s)` : readOfflineMatchSnapshot(match.id) ? 'Copia local lista' : 'Sin copia local'}
+        </div>
+      </div>
       <div className="sticky top-3 z-10 rounded-lg border border-gold/30 bg-black/95 p-4 shadow-gold">
         <div className="mb-3 flex items-center justify-between gap-2">
           <Badge tone={timer.period === 'Finalizado' ? 'gold' : 'red'}>{timer.period === 'Finalizado' ? 'Finalizado' : 'EN VIVO'}</Badge>

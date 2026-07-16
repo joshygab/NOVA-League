@@ -9,6 +9,7 @@ import PlayerAvatar from '../components/PlayerAvatar'
 import StatCard from '../components/StatCard'
 import { goalTypeLabel } from '../lib/labels'
 import { calculateNovaRating } from '../lib/playerProgression'
+import { hasSupabaseConfig, supabase } from '../lib/supabase'
 
 export default function MatchDetailPage({ league }) {
   const [now, setNow] = useState(Date.now())
@@ -16,6 +17,7 @@ export default function MatchDetailPage({ league }) {
   const targetId = matchId || id
   const match = league.matches.find((item) => item.id === targetId) || league.novaChampions?.matches?.find((item) => item.id === targetId)
   const routeLive = match?.status === 'in_progress' || match?.status === 'live'
+  const realtime = useMatchRealtime(targetId)
 
   useEffect(() => {
     if (!routeLive) return undefined
@@ -24,31 +26,37 @@ export default function MatchDetailPage({ league }) {
   }, [routeLive])
 
   if (!match) return <Navigate to="/partidos" replace />
+  const displayMatch = realtime.matchPatch ? { ...match, ...realtime.matchPatch } : match
   const isChampions = !league.matches.some((item) => item.id === targetId)
 
-  const home = league.teamsById.get(match.home_team_id)
-  const away = league.teamsById.get(match.away_team_id)
-  const division = league.divisionsById.get(match.division_id || home?.division_id)
-  const played = isFinishedMatch(match.status)
-  const live = match.status === 'in_progress' || match.status === 'live'
-  const liveSeconds = live ? calculateLiveSeconds(match, now) : 0
+  const home = league.teamsById.get(displayMatch.home_team_id)
+  const away = league.teamsById.get(displayMatch.away_team_id)
+  const division = league.divisionsById.get(displayMatch.division_id || home?.division_id)
+  const played = isFinishedMatch(displayMatch.status)
+  const live = displayMatch.status === 'in_progress' || displayMatch.status === 'live'
+  const liveSeconds = live ? calculateLiveSeconds(displayMatch, now) : 0
   const liveScore = {
-    home: Number(match.home_score_live ?? match.home_score ?? 0),
-    away: Number(match.away_score_live ?? match.away_score ?? 0),
+    home: Number(displayMatch.home_score_live ?? displayMatch.home_score ?? 0),
+    away: Number(displayMatch.away_score_live ?? displayMatch.away_score ?? 0),
   }
   const standings = league.divisionTables.find((item) => item.id === division?.id)?.standings || []
   const homeStanding = standings.find((team) => team.id === home?.id)
   const awayStanding = standings.find((team) => team.id === away?.id)
-  const cupStats = league.novaChampions?.stats?.filter((row) => row.match_id === match.id) || []
-  const matchGoals = isChampions ? cupStats.filter((row) => row.stat_type === 'goal') : league.goals.filter((goal) => goal.match_id === match.id)
-  const cards = isChampions ? cupStats.filter((row) => row.stat_type?.includes('card')).map((row) => ({ ...row, type: row.stat_type === 'yellow_card' ? 'yellow' : 'red' })) : league.cards.filter((card) => card.match_id === match.id)
-  const events = league.events.filter((event) => event.match_id === match.id)
-  const report = league.reports.find((item) => item.match_id === match.id)
-  const lineups = league.lineups.filter((lineup) => lineup.match_id === match.id)
+  const cupStats = league.novaChampions?.stats?.filter((row) => row.match_id === displayMatch.id) || []
+  const matchGoals = isChampions ? cupStats.filter((row) => row.stat_type === 'goal') : league.goals.filter((goal) => goal.match_id === displayMatch.id)
+  const cards = isChampions ? cupStats.filter((row) => row.stat_type?.includes('card')).map((row) => ({ ...row, type: row.stat_type === 'yellow_card' ? 'yellow' : 'red' })) : league.cards.filter((card) => card.match_id === displayMatch.id)
+  const realtimeEvents = mergeEvents(league.events.filter((event) => event.match_id === displayMatch.id), realtime.events)
+  const events = realtimeEvents.filter((event) => !event.is_voided)
+  const eventGoals = events.filter((event) => (event.event_type || event.type) === 'goal')
+  const eventCards = events
+    .filter((event) => ['yellow_card', 'second_yellow', 'red_card', 'staff_card'].includes(event.event_type || event.type))
+    .map((event) => ({ ...event, type: ['yellow_card', 'staff_card'].includes(event.event_type || event.type) ? 'yellow' : 'red' }))
+  const report = league.reports.find((item) => item.match_id === displayMatch.id)
+  const lineups = league.lineups.filter((lineup) => lineup.match_id === displayMatch.id)
   const homeLineup = lineups.filter((lineup) => lineup.team_id === home?.id)
   const awayLineup = lineups.filter((lineup) => lineup.team_id === away?.id)
-  const timeline = buildTimeline({ goals: matchGoals, cards, events, league })
-  const mvp = league.playersById.get(match.mvp_player_id)
+  const timeline = buildTimeline({ goals: mergeEvents(matchGoals, eventGoals), cards: mergeEvents(cards, eventCards), events, league })
+  const mvp = league.playersById.get(displayMatch.mvp_player_id)
   const featured = [...league.playerStats]
     .filter((player) => [home?.id, away?.id].includes(player.team_id))
     .sort((a, b) => (b.goals + b.assists + b.mvpAwards) - (a.goals + a.assists + a.mvpAwards))
@@ -60,16 +68,16 @@ export default function MatchDetailPage({ league }) {
       <div className="space-y-6">
         <section className="overflow-hidden rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
-            <Badge tone={live ? 'red' : played ? 'gold' : 'blue'}>{matchStatusLabel(match.status)}</Badge>
-            <span className="inline-flex items-center gap-2"><CalendarDays size={16} />{formatMatchDate(match.match_date)}</span>
-            <span className="inline-flex items-center gap-2"><MapPin size={16} />{match.venue || 'Cancha por definir'}</span>
+            <Badge tone={live ? 'red' : played ? 'gold' : 'blue'}>{matchStatusLabel(displayMatch.status)}</Badge>
+            <span className="inline-flex items-center gap-2"><CalendarDays size={16} />{formatMatchDate(displayMatch.match_date)}</span>
+            <span className="inline-flex items-center gap-2"><MapPin size={16} />{displayMatch.venue || 'Cancha por definir'}</span>
           </div>
           <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <TeamHero team={home} standing={homeStanding} align="right" />
             <div className="rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-center">
-              {live ? <p className="text-4xl font-black text-white">{liveScore.home} - {liveScore.away}</p> : played ? <p className="text-4xl font-black text-white">{match.home_score} - {match.away_score}</p> : <p className="text-xl font-black text-gold">VS</p>}
-              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gold">Jornada {match.round}</p>
-              {live && <p className="mt-2 rounded bg-red-500/15 px-2 py-1 text-xs font-black text-red-100">Marcador provisional · {match.current_period || 'En vivo'} · {formatClock(liveSeconds)}</p>}
+              {live ? <p className="text-4xl font-black text-white">{liveScore.home} - {liveScore.away}</p> : played ? <p className="text-4xl font-black text-white">{displayMatch.home_score} - {displayMatch.away_score}</p> : <p className="text-xl font-black text-gold">VS</p>}
+              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gold">Jornada {displayMatch.round}</p>
+              {live && <p className="mt-2 rounded bg-red-500/15 px-2 py-1 text-xs font-black text-red-100">Marcador provisional · {displayMatch.current_period || 'En vivo'} · {formatClock(liveSeconds)}</p>}
             </div>
             <TeamHero team={away} standing={awayStanding} />
           </div>
@@ -78,7 +86,7 @@ export default function MatchDetailPage({ league }) {
 
         {!played && (
           <section className="grid gap-4 lg:grid-cols-3">
-            {live && <LivePublicPanel match={match} seconds={liveSeconds} />}
+            {live && <LivePublicPanel match={displayMatch} seconds={liveSeconds} />}
             <FormCard title="Últimos resultados local" team={home} matches={recentMatches(league.matches, home?.id)} league={league} />
             <FormCard title="Últimos resultados visitante" team={away} matches={recentMatches(league.matches, away?.id)} league={league} />
             <section className="panel p-5">
@@ -151,7 +159,7 @@ export default function MatchDetailPage({ league }) {
                 <p><span className="font-bold text-white">Estado:</span> {report.status === 'finalized' ? 'Finalizada' : 'Borrador'}</p>
                 <p><span className="font-bold text-white">Observaciones:</span> {report.observations || 'Sin observaciones'}</p>
                 <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-gold">
-                  <ShieldCheck size={16} className="mr-1 inline" /> {match.status === 'official' ? 'Resultado oficial publicado' : 'Acta disponible para revisión'}
+                  <ShieldCheck size={16} className="mr-1 inline" /> {displayMatch.status === 'official' ? 'Resultado oficial publicado' : 'Acta disponible para revisión'}
                 </p>
               </div>
             ) : (
@@ -162,6 +170,43 @@ export default function MatchDetailPage({ league }) {
       </div>
     </>
   )
+}
+
+function useMatchRealtime(matchId) {
+  const [matchPatch, setMatchPatch] = useState(null)
+  const [events, setEvents] = useState([])
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !matchId) return undefined
+    const channel = supabase
+      .channel(`match-center-${matchId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, (payload) => {
+        if (payload.new) setMatchPatch(payload.new)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_events', filter: `match_id=eq.${matchId}` }, (payload) => {
+        const row = payload.new || payload.old
+        if (!row) return
+        setEvents((current) => {
+          const next = current.filter((item) => item.id !== row.id)
+          if (payload.eventType === 'DELETE') return next
+          return [...next, row]
+        })
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [matchId])
+
+  return { matchPatch, events }
+}
+
+function mergeEvents(base, realtime) {
+  const rows = new Map()
+  base.forEach((event) => rows.set(event.id, event))
+  realtime.forEach((event) => rows.set(event.id, event))
+  return [...rows.values()]
 }
 
 function TeamHero({ team, standing, align = 'left' }) {
@@ -236,7 +281,7 @@ function buildTimeline({ goals, cards, events, league }) {
       text: `${league.playersById.get(card.player_id)?.name || 'Jugador'} · ${league.teamsById.get(card.team_id)?.name || 'Equipo'}`,
     })),
     ...events
-      .filter((event) => !['goal', 'yellow_card', 'red_card'].includes(event.event_type || event.type))
+      .filter((event) => !['goal', 'yellow_card', 'second_yellow', 'red_card', 'staff_card'].includes(event.event_type || event.type))
       .map((event) => ({
         id: `event-${event.id}`,
         minute: Number(event.minute || 0),
