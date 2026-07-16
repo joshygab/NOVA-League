@@ -156,11 +156,19 @@ function adminTitle(tab) {
 
 function AdminSummary({ league, setTab, run, busy }) {
   const pending = league.players.filter((player) => player.approval_status === 'pending').length
-  const unpublished = league.matches.filter((match) => match.status === 'played').length
+  const inReview = league.matches.filter((match) => match.status === 'played').length
   const sanctions = league.sanctions.filter((sanction) => sanction.status === 'active').length
   const today = new Date().toISOString().slice(0, 10)
   const todayMatches = league.matches.filter((match) => match.match_date?.slice(0, 10) === today)
   const pendingToday = todayMatches.filter((match) => match.status !== 'played').length
+  const upcomingMatches = league.matches
+    .filter((match) => match.status !== 'played' && match.match_date?.slice(0, 10) >= today)
+    .sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
+  const nextMatch = upcomingMatches[0]
+  const incompleteMatches = league.matches.filter((match) => !match.match_date || !match.venue).length
+  const draftReports = league.reports.filter((report) => report.status !== 'finalized').length
+  const unsignedReports = league.reports.filter((report) => !report.home_captain_signature || !report.away_captain_signature || !report.referee_signature).length
+  const calendarConflicts = findCalendarConflicts(league.matches).length
 
   return (
     <div className="space-y-6">
@@ -169,14 +177,43 @@ function AdminSummary({ league, setTab, run, busy }) {
         <h2 className="mt-2 text-3xl font-black">Hola, Admin</h2>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <AdminMetric label="Partidos pendientes" value={pendingToday} />
-          <AdminMetric label="Resultados por publicar" value={unpublished} />
+          <AdminMetric label="Resultados en revisión" value={inReview} />
           <AdminMetric label="Sanciones pendientes" value={sanctions} />
+        </div>
+      </section>
+
+      <section className="grid gap-3 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="panel p-5">
+          <div className="mb-4">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Atención</p>
+            <h3 className="mt-1 text-2xl font-black">Qué necesita revisión</h3>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AdminAttentionCard title="Jugadores por aprobar" value={pending} text="Revisa registros nuevos" tone={pending ? 'gold' : 'ok'} onClick={() => setTab('aprobaciones')} />
+            <AdminAttentionCard title="Sanciones activas" value={sanctions} text="Disciplina pendiente" tone={sanctions ? 'danger' : 'ok'} onClick={() => setTab('sanciones')} />
+            <AdminAttentionCard title="Actas sin cerrar" value={draftReports} text="Borradores guardados" tone={draftReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />
+            <AdminAttentionCard title="Actas sin firma" value={unsignedReports} text="Faltan firmas digitales" tone={unsignedReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />
+            <AdminAttentionCard title="Partidos incompletos" value={incompleteMatches} text="Sin cancha o fecha" tone={incompleteMatches ? 'gold' : 'ok'} onClick={() => setTab('partidos-form')} />
+            <AdminAttentionCard title="Choques de calendario" value={calendarConflicts} text="Misma cancha y hora" tone={calendarConflicts ? 'danger' : 'ok'} onClick={() => setTab('partidos')} />
+          </div>
+        </div>
+
+        <div className="panel p-5">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Próximo partido</p>
+          {nextMatch ? (
+            <div className="mt-4 space-y-4">
+              <AdminMatchCard match={nextMatch} league={league} onStart={() => setTab('acta digital')} />
+              <p className="text-sm text-slate-400">Abre el acta digital cuando el árbitro esté listo para confirmar jugadores.</p>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-400">No hay próximos partidos programados.</p>
+          )}
         </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />
-        <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos')} />
+        <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos-form')} />
         <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />
         <AdminAction title="Modo Campeón" text="Presentación del campeón" onClick={() => setTab('modo campeón')} />
         <AdminAction title="Bitácora" text="Acciones recientes" onClick={() => setTab('bitacora')} />
@@ -234,6 +271,22 @@ function ChampionsAdminStatus({ league, setTab, run, busy }) {
 
 function AdminMetric({ label, value }) {
   return <div className="rounded-lg border border-white/10 bg-white/[0.06] p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{label}</p><p className="mt-3 text-4xl font-black">{value}</p></div>
+}
+
+function AdminAttentionCard({ title, value, text, tone = 'gold', onClick }) {
+  const toneClass = {
+    ok: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
+    gold: 'border-gold/30 bg-gold/10 text-gold',
+    danger: 'border-red-400/30 bg-red-500/10 text-red-100',
+  }[tone]
+
+  return (
+    <button onClick={onClick} className={`rounded-lg border p-4 text-left transition hover:-translate-y-0.5 ${toneClass}`}>
+      <p className="text-3xl font-black">{value}</p>
+      <p className="mt-2 font-black text-white">{title}</p>
+      <p className="mt-1 text-sm text-slate-300">{text}</p>
+    </button>
+  )
 }
 
 function AdminAction({ title, text, onClick }) {
@@ -329,6 +382,17 @@ function statusBadge(status) {
   if (status === 'in_progress') return '🔵 En curso'
   if (status === 'problem') return '🔴 Problema'
   return '🟡 Pendiente'
+}
+
+function findCalendarConflicts(matches = []) {
+  const slots = new Map()
+  matches
+    .filter((match) => match.status !== 'played' && match.match_date && match.venue)
+    .forEach((match) => {
+      const slot = `${match.match_date.slice(0, 16)}-${match.venue.toLowerCase().trim()}`
+      slots.set(slot, [...(slots.get(slot) || []), match])
+    })
+  return [...slots.values()].filter((slotMatches) => slotMatches.length > 1)
 }
 
 function LeagueSettingsForm({ run, busy, settings }) {
