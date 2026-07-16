@@ -19,7 +19,17 @@ export function calculateNovaRating(player = {}, teamStanding = null) {
   const fairPlay = clamp(75 - cards * 6 + played)
   const overall = clamp((pace * 0.18) + (shooting * 0.22) + (passing * 0.18) + (defending * 0.16) + (physical * 0.16) + (fairPlay * 0.1))
 
-  return { overall, pace, shooting, passing, defending, physical, fairPlay }
+  return {
+    overall,
+    pace,
+    shooting,
+    passing,
+    defending,
+    physical,
+    fairPlay,
+    form: calculateRecentForm(player),
+    notes: ratingNotes({ played, goals, assists, mvp, cards, cleanSheets, wins }),
+  }
 }
 
 export const achievementCatalog = [
@@ -36,4 +46,25 @@ export const achievementCatalog = [
 
 export function getPlayerAchievements(player) {
   return achievementCatalog.map((achievement) => ({ ...achievement, unlocked: achievement.unlocked(player) }))
+}
+
+function calculateRecentForm(player) {
+  const recent = (player.matchHistory || []).slice(0, 5)
+  if (!recent.length) return 50
+  const base = 55 + Math.min(20, recent.length * 4)
+  const impact = Math.min(24, (player.goals || 0) * 2 + (player.assists || 0) * 2 + (player.mvpAwards || 0) * 4)
+  const discipline = Math.min(18, (player.totalCards || 0) * 3)
+  return clamp(base + impact - discipline, 35, 99)
+}
+
+function ratingNotes({ played, goals, assists, mvp, cards, cleanSheets, wins }) {
+  const notes = []
+  if (goals) notes.push(`+ tiro por ${goals} gol(es)`)
+  if (assists) notes.push(`+ pase por ${assists} asistencia(s)`)
+  if (mvp) notes.push(`+ impacto por ${mvp} MVP`)
+  if (cleanSheets) notes.push(`+ defensa por ${cleanSheets} portería(s) en cero`)
+  if (wins) notes.push(`+ físico por ${wins} victoria(s) del equipo`)
+  if (played < 3) notes.push('rating moderado por pocos partidos')
+  if (cards) notes.push(`- fair play por ${cards} tarjeta(s) ponderadas`)
+  return notes
 }

@@ -101,6 +101,7 @@ export function buildPlayerStats(players = [], goals = [], events = [], cards = 
         doubleYellowCards: 0,
         totalCards: 0,
         mvpAwards: 0,
+        cleanSheets: 0,
         playedMatches: 0,
         goalAverage: 0,
         goalHistory: [],
@@ -154,6 +155,20 @@ export function buildPlayerStats(players = [], goals = [], events = [], cards = 
         const mvp = stats.get(match.mvp_player_id)
         if (mvp) mvp.mvpAwards += 1
       }
+      const homeClean = Number(match.away_score) === 0
+      const awayClean = Number(match.home_score) === 0
+      players
+        .filter((player) => player.team_id === match.home_team_id && isDefensivePosition(player.position) && homeClean)
+        .forEach((player) => {
+          const row = stats.get(player.id)
+          if (row) row.cleanSheets += 1
+        })
+      players
+        .filter((player) => player.team_id === match.away_team_id && isDefensivePosition(player.position) && awayClean)
+        .forEach((player) => {
+          const row = stats.get(player.id)
+          if (row) row.cleanSheets += 1
+        })
     })
 
   sanctions
@@ -188,4 +203,9 @@ export function buildMvpRanking(players = [], matches = []) {
 
 export function isCountedMatch(match) {
   return ['played', 'official'].includes(match?.status)
+}
+
+function isDefensivePosition(position = '') {
+  const normalized = position.toLowerCase()
+  return ['por', 'portero', 'arquero', 'def', 'defensa'].some((value) => normalized.includes(value))
 }

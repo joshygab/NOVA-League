@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import { hasPermission, permissions } from '../../lib/permissions'
@@ -12,10 +12,10 @@ import { goalTypes, playoffStageLabel } from '../../lib/labels'
 import MatchSheetAdmin from './MatchSheetAdmin'
 import NovaIdScannerAdmin from './NovaIdScannerAdmin'
 
-const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', category: '', season: '', crest_url: '', crestFile: null }
+const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', coach: '', category: '', season: '', roster_limit: 18, home_colors: '', away_colors: '', social_url: '', inscription_status: 'active', crest_url: '', crestFile: null }
 const emptyDivision = { name: '', slug: '', description: '', active: true, level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
 const emptyLeagueSettings = { name: '', short_name: '', tagline: '', description: '', logo_url: '', logoFile: null }
-const emptyPlayer = { team_id: '', name: '', email: '', phone: '', birth_date: '', requested_team_name: '', position: '', number: '', age: '', approval_status: 'approved', photo_url: '', photoFile: null }
+const emptyPlayer = { team_id: '', status: 'active', name: '', email: '', phone: '', birth_date: '', requested_team_name: '', position: '', number: '', age: '', approval_status: 'approved', photo_url: '', photoFile: null }
 const emptyMatch = { division_id: '', round: 1, match_date: '', venue: '', home_team_id: '', away_team_id: '', home_score: '', away_score: '', status: 'scheduled', mvp_player_id: '', observations: '' }
 const emptyEvent = { division_id: '', match_id: '', team_id: '', player_id: '', type: 'goal', minute: '' }
 const emptyGoal = { division_id: '', match_id: '', team_id: '', player_id: '', minute: '', goal_type: 'open_play', assist_player_id: '' }
@@ -25,6 +25,8 @@ const emptyNews = { title: '', excerpt: '', body: '', cover_url: '', coverFile: 
 const emptyChampionsMatch = { season_id: new Date().getFullYear().toString(), round: 'quarterfinal', match_order: 1, home_team_id: '', away_team_id: '', home_score: '', away_score: '', home_penalties: '', away_penalties: '', status: 'scheduled', match_date: '', venue: '', mvp_player_id: '', best_goalkeeper_player_id: '' }
 const emptyChampionsStat = { match_id: '', team_id: '', player_id: '', stat_type: 'goal', minute: '', value: 1 }
 const emptyChampionSpotlight = { is_active: false, display_mode: 'home_section', tournament_name: '', season_label: '', champion_team_id: '', champion_photo_url: '', championPhotoFile: null, message_title: '¡Felicidades, campeones!', message_body: 'Han conquistado la gloria de NOVA.' }
+const emptyRosterMovement = { player_id: '', from_team_id: '', to_team_id: '', movement_type: 'alta', reason: '', status: 'approved' }
+const emptyTeamOfWeek = { season_label: new Date().getFullYear().toString(), round: 1, slot: 'mvp', player_id: '', team_id: '', note: '' }
 
 export default function AdminDashboard({ league }) {
   const [tab, setTab] = useState('dashboard')
@@ -102,6 +104,8 @@ export default function AdminDashboard({ league }) {
         {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
         {tab === 'equipos-form' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
         {tab === 'jugadores-form' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
+        {tab === 'plantillas' && <RosterAdmin busy={busy} run={run} league={league} />}
+        {tab === 'equipo de la jornada' && <TeamOfWeekAdmin busy={busy} run={run} league={league} />}
         {tab === 'aprobaciones' && <PlayerApprovals busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos-form' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'revisión de actas' && <MatchReviewAdmin busy={busy} run={run} league={league} />}
@@ -131,7 +135,7 @@ export default function AdminDashboard({ league }) {
 function sectionForTool(tab) {
   if (['partidos-form', 'revisión de actas', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
   if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
-  if (['jugadores-form', 'aprobaciones'].includes(tab)) return 'jugadores'
+  if (['jugadores-form', 'aprobaciones', 'plantillas', 'equipo de la jornada'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
   if (['bitacora'].includes(tab)) return 'dashboard'
   return 'dashboard'
@@ -153,6 +157,8 @@ function adminTitle(tab) {
     'partidos-form': 'Crear Partido',
     'equipos-form': 'Gestionar Equipos',
     'jugadores-form': 'Gestionar Jugadores',
+    plantillas: 'Control de Plantillas',
+    'equipo de la jornada': 'Equipo de la Jornada',
     'sanciones-form': 'Gestionar Sanciones',
   }
   return titles[tab] || tab
@@ -411,6 +417,8 @@ function JugadoresHub({ league, setTab, run, busy }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AdminAction title="Registrar jugador" text="Alta manual" onClick={() => setTab('jugadores-form')} />
         <AdminAction title="Aprobaciones" text={`${pending} pendientes`} onClick={() => setTab('aprobaciones')} />
+        <AdminAction title="Plantillas" text="Altas, bajas y transferencias" onClick={() => setTab('plantillas')} />
+        <AdminAction title="Equipo Jornada" text="Selección manual" onClick={() => setTab('equipo de la jornada')} />
         <AdminAction title="Estadísticas" text="Goles y asistencias" onClick={() => setTab('estadísticas de jugadores')} />
         <AdminAction title="NOVA ID" text="Escanear credencial" onClick={() => setTab('escáner nova id')} />
       </div>
@@ -659,8 +667,14 @@ function TeamForm({ run, busy, teams, divisions }) {
     <Select label="División" value={form.division_id || ''} onChange={(division_id) => setForm({ ...form, division_id })} options={divisions} />
     <Field label="Ciudad" value={form.city} onChange={(city) => setForm({ ...form, city })} />
     <Field label="Capitán" value={form.captain || ''} onChange={(captain) => setForm({ ...form, captain })} />
+    <Field label="Entrenador" value={form.coach || ''} onChange={(coach) => setForm({ ...form, coach })} />
     <Field label="Categoría" value={form.category || ''} onChange={(category) => setForm({ ...form, category })} />
     <Field label="Temporada" value={form.season || ''} onChange={(season) => setForm({ ...form, season })} />
+    <Field label="Límite de jugadores" value={form.roster_limit || 18} onChange={(roster_limit) => setForm({ ...form, roster_limit })} />
+    <Field label="Colores local" value={form.home_colors || ''} onChange={(home_colors) => setForm({ ...form, home_colors })} />
+    <Field label="Colores visitante" value={form.away_colors || ''} onChange={(away_colors) => setForm({ ...form, away_colors })} />
+    <Field label="Red social" value={form.social_url || ''} onChange={(social_url) => setForm({ ...form, social_url })} />
+    <Select label="Estado de inscripción" value={form.inscription_status || 'active'} onChange={(inscription_status) => setForm({ ...form, inscription_status })} options={[{ id: 'active', name: 'Activa' }, { id: 'pending', name: 'Pendiente' }, { id: 'blocked', name: 'Bloqueada' }]} />
     <Field label="Fundado" value={form.founded || ''} onChange={(founded) => setForm({ ...form, founded })} />
     <FileField label="Escudo" onChange={(crestFile) => setForm({ ...form, crestFile })} />
     <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => saveTeam(form))} onDelete={() => run(() => deleteRecord('teams', form.id), 'Equipo eliminado correctamente')} />
@@ -712,9 +726,102 @@ function PlayerForm({ run, busy, teams, players }) {
     <Field label="Número" value={form.number || ''} onChange={(number) => setForm({ ...form, number })} />
     <Field label="Edad" value={form.age || ''} onChange={(age) => setForm({ ...form, age })} />
     <Select label="Estado de aprobación" value={form.approval_status || 'approved'} onChange={(approval_status) => setForm({ ...form, approval_status })} options={[{ id: 'pending', name: 'Pendiente' }, { id: 'approved', name: 'Aprobado' }, { id: 'rejected', name: 'Rechazado' }]} />
+    <Select label="Estado deportivo" value={form.status || 'active'} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'active', name: 'Activo' }, { id: 'injured', name: 'Lesionado' }, { id: 'suspended', name: 'Suspendido' }]} />
     <FileField label="Foto" onChange={(photoFile) => setForm({ ...form, photoFile })} />
     <ActionRow busy={busy} canDelete={Boolean(form.id)} onSave={() => run(() => savePlayer(form))} onDelete={() => run(() => deleteRecord('players', form.id), 'Jugador eliminado correctamente')} />
   </AdminGrid>
+}
+
+function RosterAdmin({ league, run, busy }) {
+  const [form, setForm] = useState(emptyRosterMovement)
+  const player = league.playersById.get(form.player_id)
+  const fromTeam = form.from_team_id || player?.team_id || ''
+  const teamPlayers = league.players.filter((item) => item.team_id === form.to_team_id)
+  const rosterLimit = 18
+  const duplicateActive = form.to_team_id && league.players.some((item) => item.id === form.player_id && item.team_id === form.to_team_id && item.approval_status === 'approved')
+  const validation = !form.player_id ? 'Selecciona un jugador.' : !form.to_team_id && form.movement_type !== 'baja' ? 'Selecciona equipo destino.' : duplicateActive ? 'El jugador ya está activo en ese equipo.' : teamPlayers.length >= rosterLimit && form.movement_type !== 'baja' ? 'El equipo destino ya alcanzó el límite sugerido de plantilla.' : ''
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[1fr_.8fr]">
+      <div className="panel space-y-4 p-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Plantillas</p>
+          <h2 className="text-2xl font-black">Altas, bajas y transferencias</h2>
+          <p className="mt-1 text-sm text-slate-400">Registra movimientos sin borrar historial del jugador.</p>
+        </div>
+        <Select label="Jugador" value={form.player_id} onChange={(player_id) => {
+          const selected = league.playersById.get(player_id)
+          setForm({ ...form, player_id, from_team_id: selected?.team_id || '' })
+        }} options={league.players} />
+        <Select label="Movimiento" value={form.movement_type} onChange={(movement_type) => setForm({ ...form, movement_type })} options={[{ id: 'alta', name: 'Alta' }, { id: 'baja', name: 'Baja' }, { id: 'transferencia', name: 'Transferencia' }, { id: 'cesion', name: 'Cesión' }]} />
+        <Select label="Equipo origen" value={fromTeam} onChange={(from_team_id) => setForm({ ...form, from_team_id })} options={league.teams} />
+        <Select label="Equipo destino" value={form.to_team_id} onChange={(to_team_id) => setForm({ ...form, to_team_id })} options={league.teams} />
+        <Field label="Motivo" value={form.reason} onChange={(reason) => setForm({ ...form, reason })} />
+        <Select label="Estado" value={form.status} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'pending', name: 'Pendiente' }, { id: 'approved', name: 'Aprobado' }, { id: 'rejected', name: 'Rechazado' }]} />
+        {validation && <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">{validation}</p>}
+        <button className="button" disabled={busy || Boolean(validation)} onClick={() => run(() => saveRosterMovement({ ...form, from_team_id: fromTeam }), 'Movimiento de plantilla guardado')}>Guardar movimiento</button>
+      </div>
+      <div className="panel p-5">
+        <h3 className="text-lg font-black">Últimos movimientos</h3>
+        <div className="mt-4 space-y-2">
+          {(league.rosterMovements || []).slice(0, 10).map((movement) => (
+            <div key={movement.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+              <p className="font-bold">{league.playersById.get(movement.player_id)?.name || 'Jugador'} · {movement.movement_type}</p>
+              <p className="text-slate-400">{league.teamsById.get(movement.from_team_id)?.name || 'Libre'} → {league.teamsById.get(movement.to_team_id)?.name || 'Sin equipo'}</p>
+            </div>
+          ))}
+          {(league.rosterMovements || []).length === 0 && <p className="text-sm text-slate-400">Sin movimientos registrados.</p>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function TeamOfWeekAdmin({ league, run, busy }) {
+  const [form, setForm] = useState(emptyTeamOfWeek)
+  const teamPlayers = league.players.filter((player) => !form.team_id || player.team_id === form.team_id)
+  const selectedPlayer = league.playersById.get(form.player_id)
+  const prepared = { ...form, team_id: form.team_id || selectedPlayer?.team_id || '' }
+  const slots = [
+    { id: 'por', name: 'Portero' },
+    { id: 'def_1', name: 'Defensa 1' },
+    { id: 'def_2', name: 'Defensa 2' },
+    { id: 'mid_1', name: 'Medio 1' },
+    { id: 'mid_2', name: 'Medio 2' },
+    { id: 'del_1', name: 'Delantero 1' },
+    { id: 'mvp', name: 'MVP Jornada' },
+  ]
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[1fr_.8fr]">
+      <div className="panel space-y-4 p-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Reconocimientos</p>
+          <h2 className="text-2xl font-black">Equipo de la Jornada</h2>
+          <p className="mt-1 text-sm text-slate-400">Selección manual inicial; después podrá sugerirse por estadísticas.</p>
+        </div>
+        <Field label="Temporada" value={form.season_label} onChange={(season_label) => setForm({ ...form, season_label })} />
+        <Field label="Jornada" value={form.round} onChange={(round) => setForm({ ...form, round })} />
+        <Select label="Lugar" value={form.slot} onChange={(slot) => setForm({ ...form, slot })} options={slots} />
+        <Select label="Equipo" value={form.team_id} onChange={(team_id) => setForm({ ...form, team_id, player_id: '' })} options={league.teams} />
+        <Select label="Jugador" value={form.player_id} onChange={(player_id) => setForm({ ...form, player_id })} options={teamPlayers} />
+        <Field label="Nota" value={form.note} onChange={(note) => setForm({ ...form, note })} />
+        <button className="button" disabled={busy || !prepared.player_id || !prepared.team_id} onClick={() => run(() => saveTeamOfWeekSelection(prepared), 'Equipo de la Jornada actualizado')}>Guardar selección</button>
+      </div>
+      <div className="panel p-5">
+        <h3 className="text-lg font-black">Selecciones guardadas</h3>
+        <div className="mt-4 space-y-2">
+          {(league.teamOfWeek || []).slice(0, 12).map((row) => (
+            <div key={row.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+              <p className="font-bold">J{row.round} · {row.slot} · {league.playersById.get(row.player_id)?.name || 'Jugador'}</p>
+              <p className="text-slate-400">{league.teamsById.get(row.team_id)?.name || 'Equipo'} {row.note ? `· ${row.note}` : ''}</p>
+            </div>
+          ))}
+          {(league.teamOfWeek || []).length === 0 && <p className="text-sm text-slate-400">Aún no hay selección.</p>}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function PlayerApprovals({ run, busy, teams, players }) {

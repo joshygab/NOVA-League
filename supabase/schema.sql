@@ -196,9 +196,15 @@ create table public.teams (
   city text,
   founded int,
   captain text,
+  coach text,
   category text,
   season text,
   crest_url text,
+  roster_limit int not null default 18,
+  home_colors text,
+  away_colors text,
+  social_url text,
+  inscription_status text not null default 'active',
   created_at timestamptz not null default now()
 );
 
@@ -365,6 +371,30 @@ create table public.player_achievements (
   achievement_id text not null references public.achievements(id) on delete cascade,
   unlocked_at timestamptz not null default now(),
   unique (player_id, achievement_id)
+);
+
+create table public.team_of_week (
+  id uuid primary key default gen_random_uuid(),
+  season_label text not null,
+  round int not null,
+  slot text not null,
+  player_id uuid not null references public.players(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (season_label, round, slot)
+);
+
+create table public.roster_movements (
+  id uuid primary key default gen_random_uuid(),
+  player_id uuid not null references public.players(id) on delete cascade,
+  from_team_id uuid references public.teams(id) on delete set null,
+  to_team_id uuid references public.teams(id) on delete set null,
+  movement_type text not null default 'alta' check (movement_type in ('alta', 'baja', 'transferencia', 'cesion')),
+  reason text,
+  status text not null default 'approved' check (status in ('pending', 'approved', 'rejected')),
+  created_at timestamptz not null default now()
 );
 
 create table public.goals (
@@ -577,6 +607,8 @@ alter table public.match_roster enable row level security;
 alter table public.player_ratings enable row level security;
 alter table public.achievements enable row level security;
 alter table public.player_achievements enable row level security;
+alter table public.team_of_week enable row level security;
+alter table public.roster_movements enable row level security;
 alter table public.goals enable row level security;
 alter table public.match_cards enable row level security;
 alter table public.sanctions enable row level security;
@@ -617,6 +649,7 @@ create policy "public read match roster" on public.match_roster for select using
 create policy "public read player ratings" on public.player_ratings for select using (true);
 create policy "public read achievements" on public.achievements for select using (true);
 create policy "public read player achievements" on public.player_achievements for select using (true);
+create policy "public read team of week" on public.team_of_week for select using (true);
 create policy "public read goals" on public.goals for select using (true);
 create policy "public read match cards" on public.match_cards for select using (true);
 create policy "public read sanctions" on public.sanctions for select using (true);
@@ -654,6 +687,9 @@ create policy "admin write match roster" on public.match_roster for all using (p
 create policy "admin write player ratings" on public.player_ratings for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write achievements" on public.achievements for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write player achievements" on public.player_achievements for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin write team of week" on public.team_of_week for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin read roster movements" on public.roster_movements for select using (public.is_admin());
+create policy "admin write roster movements" on public.roster_movements for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write goals" on public.goals for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write match cards" on public.match_cards for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write sanctions" on public.sanctions for all using (public.is_admin()) with check (public.is_admin());
@@ -720,6 +756,8 @@ alter publication supabase_realtime add table public.match_roster;
 alter publication supabase_realtime add table public.player_ratings;
 alter publication supabase_realtime add table public.achievements;
 alter publication supabase_realtime add table public.player_achievements;
+alter publication supabase_realtime add table public.team_of_week;
+alter publication supabase_realtime add table public.roster_movements;
 alter publication supabase_realtime add table public.goals;
 alter publication supabase_realtime add table public.match_cards;
 alter publication supabase_realtime add table public.sanctions;

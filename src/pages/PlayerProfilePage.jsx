@@ -5,6 +5,8 @@ import PageTitle from '../components/PageTitle'
 import PlayerAvatar from '../components/PlayerAvatar'
 import StatCard from '../components/StatCard'
 import { goalTypeLabel } from '../lib/labels'
+import NovaRatingCard from '../components/NovaRatingCard'
+import { calculateNovaRating, getPlayerAchievements } from '../lib/playerProgression'
 
 export default function PlayerProfilePage({ league }) {
   const { id } = useParams()
@@ -12,6 +14,10 @@ export default function PlayerProfilePage({ league }) {
   if (!player) return <Navigate to="/jugadores" replace />
 
   const team = league.teamsById.get(player.team_id)
+  const division = league.divisionsById.get(team?.division_id)
+  const standing = league.standings.find((row) => row.id === player.team_id)
+  const rating = calculateNovaRating(player, standing)
+  const achievements = getPlayerAchievements(player)
 
   return (
     <>
@@ -22,6 +28,7 @@ export default function PlayerProfilePage({ league }) {
           <p className="mt-4 text-xs font-black uppercase tracking-[0.22em] text-gold">#{player.number || '--'} {player.position}</p>
           <h2 className="mt-2 text-2xl font-black">{player.name}</h2>
           <p className="text-slate-400">{team?.name || 'Sin equipo'}</p>
+          <p className="mt-1 text-sm text-slate-500">{division?.name || 'Sin división'}</p>
           {player.activeSanctions.length > 0 && (
             <div className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-4">
               <Badge tone="red">Sanción activa</Badge>
@@ -36,6 +43,24 @@ export default function PlayerProfilePage({ league }) {
           <StatCard label="Amarillas" value={player.yellowCards} />
           <StatCard label="Rojas" value={player.redCards} />
           <StatCard label="PJ" value={player.playedMatches} />
+          <StatCard label="Porterías en cero" value={player.cleanSheets || 0} />
+          <StatCard label="Forma" value={rating.form} tone="gold" />
+          <StatCard label="OVR" value={rating.overall} tone="gold" />
+        </div>
+      </section>
+
+      <section className="mb-6 grid gap-6 lg:grid-cols-[.8fr_1.2fr]">
+        <NovaRatingCard rating={rating} />
+        <div className="panel p-5">
+          <h2 className="text-xl font-black">Logros</h2>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {achievements.map((achievement) => (
+              <div key={achievement.id} className={`rounded-lg border p-3 ${achievement.unlocked ? 'border-gold/40 bg-gold/10 text-gold shadow-gold' : 'border-white/10 bg-white/5 text-slate-500'}`}>
+                <p className="font-black">{achievement.icon} {achievement.name}</p>
+                <p className="mt-1 text-xs">{achievement.description}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

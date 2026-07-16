@@ -13,11 +13,16 @@ export default function TeamProfilePage({ league }) {
   const tableIndex = league.standings.findIndex((entry) => entry.id === id)
   const stats = league.standings[tableIndex] || {}
   const tablePosition = tableIndex >= 0 ? tableIndex + 1 : null
+  const division = league.divisionsById.get(team.division_id)
   const players = league.playerStats.filter((player) => player.team_id === id)
   const matches = league.matches
     .filter((match) => match.home_team_id === id || match.away_team_id === id)
     .sort((a, b) => new Date(b.match_date) - new Date(a.match_date))
   const rankings = buildTeamRankings(players)
+  const recentForm = buildRecentForm(matches, id)
+  const suspended = players.filter((player) => player.activeSanctions.length > 0 || player.status === 'suspended')
+  const injured = players.filter((player) => player.status === 'injured')
+  const rosterLimit = Number(team.roster_limit || 18)
 
   return (
     <>
@@ -27,11 +32,17 @@ export default function TeamProfilePage({ league }) {
           <Crest src={team.crest_url} name={team.name} size="lg" />
           <h2 className="mt-4 text-3xl font-black">{team.name}</h2>
           <div className="mt-4 space-y-2 text-sm text-slate-300">
+            <p>División: <span className="font-bold text-white">{division?.name || 'Sin división'}</span></p>
             <p>Capitán: <span className="font-bold text-white">{team.captain || 'Por definir'}</span></p>
             <p>Categoría: <span className="font-bold text-white">{team.category || 'N/D'}</span></p>
             <p>Temporada: <span className="font-bold text-white">{team.season || 'N/D'}</span></p>
+            <p>Fundación: <span className="font-bold text-white">{team.founded || 'N/D'}</span></p>
           </div>
           <div className="mt-5"><Badge tone={tableIndex >= 0 && tableIndex < 4 ? 'gold' : 'blue'}>Posición actual: {tablePosition ? `#${tablePosition}` : 'N/D'}</Badge></div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {recentForm.map((result, index) => <Badge key={`${result}-${index}`} tone={result === 'G' ? 'green' : result === 'E' ? 'yellow' : 'red'}>{result}</Badge>)}
+            {recentForm.length === 0 && <Badge tone="slate">Sin racha</Badge>}
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-4">
           <StatCard label="PJ" value={stats.played ?? 0} />
@@ -42,6 +53,10 @@ export default function TeamProfilePage({ league }) {
           <StatCard label="GC" value={stats.goalsAgainst ?? 0} />
           <StatCard label="DG" value={stats.goalDifference ?? 0} />
           <StatCard label="Puntos" value={stats.points ?? 0} tone="gold" />
+          <StatCard label="Plantilla" value={`${players.length}/${rosterLimit}`} />
+          <StatCard label="Suspendidos" value={suspended.length} />
+          <StatCard label="Lesionados" value={injured.length} />
+          <StatCard label="Racha" value={recentForm.join(' ') || '-'} tone="gold" />
         </div>
       </section>
 
@@ -98,6 +113,20 @@ function buildTeamRankings(players) {
     mvp: sortBy('mvpAwards'),
     cards: sortBy('totalCards'),
   }
+}
+
+function buildRecentForm(matches, teamId) {
+  return matches
+    .filter((match) => ['played', 'official'].includes(match.status))
+    .slice(0, 5)
+    .map((match) => {
+      const home = match.home_team_id === teamId
+      const teamScore = home ? match.home_score : match.away_score
+      const rivalScore = home ? match.away_score : match.home_score
+      if (teamScore > rivalScore) return 'G'
+      if (teamScore < rivalScore) return 'P'
+      return 'E'
+    })
 }
 
 function RankingCard({ title, player, value }) {

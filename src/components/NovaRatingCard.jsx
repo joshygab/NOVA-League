@@ -16,6 +16,13 @@ export default function NovaRatingCard({ rating }) {
         </div>
         <div className="grid h-20 w-20 place-items-center rounded-lg border border-gold/50 bg-gold/10 text-4xl font-black text-gold">{rating.overall}</div>
       </div>
+      <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-black text-slate-300">Forma reciente</span>
+          <span className="text-2xl font-black text-white">{rating.form || 50}</span>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-electric" style={{ width: `${rating.form || 50}%` }} /></div>
+      </div>
       <div className="mt-5 grid gap-2">
         {attrs.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[80px_1fr_42px] items-center gap-3 text-sm">
@@ -25,6 +32,11 @@ export default function NovaRatingCard({ rating }) {
           </div>
         ))}
       </div>
+      {rating.notes?.length > 0 && (
+        <div className="mt-4 space-y-1 border-t border-white/10 pt-3">
+          {rating.notes.slice(0, 4).map((note) => <p key={note} className="text-xs text-slate-400">{note}</p>)}
+        </div>
+      )}
     </section>
   )
 }

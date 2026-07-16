@@ -53,8 +53,14 @@ export async function saveTeam(form) {
     city: form.city,
     founded: form.founded ? Number(form.founded) : null,
     captain: form.captain || null,
+    coach: form.coach || null,
     category: form.category || null,
     season: form.season || null,
+    roster_limit: Number(form.roster_limit || 18),
+    home_colors: form.home_colors || null,
+    away_colors: form.away_colors || null,
+    social_url: form.social_url || null,
+    inscription_status: form.inscription_status || 'active',
     crest_url: form.crest_url || null,
   }
   if (form.crestFile) {
@@ -232,6 +238,39 @@ export async function savePlayer(form) {
   return auditResult(result, { action: form.id ? 'update' : 'create', module: 'players', entityTable: 'players', previousValue: previous })
 }
 
+export async function saveRosterMovement(form) {
+  const result = await supabase.from('roster_movements').insert({
+    player_id: form.player_id,
+    from_team_id: form.from_team_id || null,
+    to_team_id: form.to_team_id || null,
+    movement_type: form.movement_type || 'alta',
+    reason: form.reason || null,
+    status: form.status || 'approved',
+  }).select().single()
+  if (result.error) return result
+
+  if (form.to_team_id) {
+    const previous = await readRecord('players', form.player_id)
+    const update = await supabase.from('players').update({ team_id: form.to_team_id }).eq('id', form.player_id)
+    if (update.error) return update
+    await logAudit({ action: 'roster_move', module: 'rosters', entityTable: 'players', entityId: form.player_id, previousValue: previous, newValue: { team_id: form.to_team_id, movement: result.data } })
+  }
+
+  return auditResult(result, { action: 'create', module: 'rosters', entityTable: 'roster_movements' })
+}
+
+export async function saveTeamOfWeekSelection(form) {
+  const result = await supabase.from('team_of_week').upsert({
+    season_label: form.season_label || new Date().getFullYear().toString(),
+    round: Number(form.round || 1),
+    slot: form.slot,
+    player_id: form.player_id,
+    team_id: form.team_id,
+    note: form.note || null,
+  }, { onConflict: 'season_label,round,slot' }).select().single()
+  return auditResult(result, { action: 'update', module: 'team_of_week', entityTable: 'team_of_week' })
+}
+
 export async function approvePlayer(playerId, teamId) {
   if (!teamId) return { error: { message: 'Selecciona un equipo antes de aprobar al jugador.' } }
   const previous = await readRecord('players', playerId)
@@ -328,7 +367,52 @@ export async function saveCard(form) {
     })
     .select()
     .single()
+  if (!result.error) await ensureDisciplinarySanction(result.data)
   return auditResult(result, { action: form.id ? 'update' : 'create', module: 'discipline', entityTable: 'match_cards', previousValue: previous })
+}
+
+async function ensureDisciplinarySanction(card) {
+  if (!card?.player_id) return
+  const redCard = card.type === 'red' || card.type === 'double_yellow'
+  let sanctionType = redCard ? 'Suspensión por tarjeta roja' : ''
+  let reason = redCard ? (card.reason || 'Tarjeta roja') : ''
+  let suspendedMatches = redCard ? 1 : 0
+
+  if (!redCard && card.type === 'yellow') {
+    const { data } = await supabase
+      .from('match_cards')
+      .select('id')
+      .eq('player_id', card.player_id)
+      .eq('type', 'yellow')
+    const yellowCount = data?.length || 0
+    if (yellowCount > 0 && yellowCount % 3 === 0) {
+      sanctionType = 'Suspensión por acumulación de amarillas'
+      reason = `${yellowCount} tarjetas amarillas acumuladas`
+      suspendedMatches = 1
+    }
+  }
+
+  if (!sanctionType) return
+  const existing = await supabase
+    .from('sanctions')
+    .select('id')
+    .eq('player_id', card.player_id)
+    .eq('status', 'active')
+    .eq('sanction_type', sanctionType)
+    .maybeSingle()
+  if (existing.data || existing.error) return
+
+  await supabase.from('sanctions').insert({
+    division_id: card.division_id || null,
+    player_id: card.player_id,
+    team_id: null,
+    sanction_type: sanctionType,
+    reason,
+    suspended_matches: suspendedMatches,
+    start_date: new Date().toISOString().slice(0, 10),
+    status: 'active',
+    notes: 'Generada automáticamente desde disciplina.',
+  })
 }
 
 export async function deleteRecord(table, id) {
