@@ -66,8 +66,39 @@ export async function saveTeam(form) {
   if (form.crestFile) {
     payload.crest_url = await uploadPublicFile('team-crests', `${crypto.randomUUID()}-${form.crestFile.name}`, form.crestFile)
   }
-  const result = await supabase.from('teams').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  const result = await upsertTeamWithSchemaFallback(form.id ? { ...payload, id: form.id } : payload)
   return auditResult(result, { action: form.id ? 'update' : 'create', module: 'teams', entityTable: 'teams', previousValue: previous })
+}
+
+async function upsertTeamWithSchemaFallback(payload) {
+  const mutablePayload = { ...payload }
+  const skipped = []
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabase.from('teams').upsert(mutablePayload).select().single()
+    if (!result.error) {
+      if (skipped.length) {
+        result.data = {
+          ...result.data,
+          _compatibility_warning: `Supabase no tiene estas columnas de equipos: ${skipped.join(', ')}. El equipo se guardó sin esos campos.`,
+        }
+      }
+      return result
+    }
+
+    const missingColumn = missingSchemaColumn(result.error)
+    if (!missingColumn || !(missingColumn in mutablePayload)) return result
+    delete mutablePayload[missingColumn]
+    skipped.push(missingColumn)
+  }
+
+  return { error: { message: 'No se pudo guardar el equipo porque faltan demasiadas columnas en Supabase. Ejecuta supabase/fix_teams_form_columns.sql.' } }
+}
+
+function missingSchemaColumn(error) {
+  const message = `${error?.message || ''} ${error?.details || ''}`
+  const match = message.match(/Could not find the '([^']+)' column/i)
+  return match?.[1] || null
 }
 
 export async function saveDivision(form) {
@@ -343,6 +374,54 @@ export async function saveMatchAssignment(form) {
   }
 
   return auditResult(result, { action: 'update', module: 'calendar', entityTable: 'match_assignments', previousValue: previous.data || null })
+}
+
+export async function updateMatchLiveState(matchId, patch, reason = 'live_state_update') {
+  if (!matchId) return { error: { message: 'Selecciona un partido.' } }
+  const previous = await readRecord('matches', matchId)
+  const payload = {
+    ...patch,
+    last_live_update_at: new Date().toISOString(),
+  }
+  const result = await supabase.from('matches').update(payload).eq('id', matchId).select().single()
+  return auditResult(result, { action: reason, module: 'referee_mode', entityTable: 'matches', entityId: matchId, previousValue: previous })
+}
+
+export async function saveRefereeAttendance({ match, player, method = 'manual', validationResult = 'approved', rejectionReason = null, deviceId = null, credentialId = null }) {
+  if (!match?.id || !player?.id) return { error: { message: 'Selecciona partido y jugador.' } }
+
+  const rosterPayload = {
+    match_id: match.id,
+    player_id: player.id,
+    team_id: player.team_id,
+    confirmed: validationResult === 'approved',
+    confirmed_at: new Date().toISOString(),
+    attendance_status: validationResult === 'approved' ? 'present' : 'review',
+    check_in_method: method,
+    credential_id: credentialId,
+    device_id: deviceId,
+    validation_result: validationResult,
+    rejection_reason: rejectionReason,
+    sync_status: navigator.onLine ? 'synced' : 'pending',
+  }
+
+  const roster = await supabase.from('match_roster').upsert(rosterPayload, { onConflict: 'match_id,player_id' }).select().single()
+  if (roster.error) return roster
+
+  if (validationResult === 'approved') {
+    const lineup = await supabase.from('match_lineups').upsert({
+      match_id: match.id,
+      team_id: player.team_id,
+      player_id: player.id,
+      is_present: true,
+      is_starter: false,
+      captain: false,
+      status: 'present',
+    }, { onConflict: 'match_id,player_id' })
+    if (lineup.error) return lineup
+  }
+
+  return auditResult(roster, { action: 'attendance_checkin', module: 'referee_mode', entityTable: 'match_roster', entityId: `${match.id}:${player.id}`, newValue: rosterPayload })
 }
 
 export async function approvePlayer(playerId, teamId) {
@@ -674,6 +753,42 @@ export async function setNovaChampionsTeam(teamId, selected, seasonId = new Date
   return result
 }
 
+export async function classifyNovaChampionsTeams({ teams, seasonId, rule = 'top2_division' }) {
+  const selected = selectNovaChampionsTeams(teams, rule)
+  if (!selected.length) return { error: { message: 'No hay equipos suficientes para clasificar.' } }
+
+  const clear = await supabase.from('nova_champions_qualified_teams').delete().eq('season_id', seasonId)
+  if (clear.error) return clear
+
+  const rows = selected.map((team, index) => ({
+    team_id: team.id,
+    season_id: seasonId,
+    qualification_method: rule,
+    pot: index < Math.ceil(selected.length / 2) ? 1 : 2,
+  }))
+  const result = await supabase.from('nova_champions_qualified_teams').insert(rows).select()
+  return auditResult(result, { action: 'auto_qualify', module: 'nova_champions', entityTable: 'nova_champions_qualified_teams', entityId: seasonId, newValue: rows })
+}
+
+function selectNovaChampionsTeams(teams, rule) {
+  const sorted = [...teams].sort((a, b) => Number(a.position || a.seed || 999) - Number(b.position || b.seed || 999) || Number(b.points || 0) - Number(a.points || 0))
+  if (rule === 'top4_general') return sorted.slice(0, 4)
+  if (rule === 'division_champions') {
+    const seen = new Set()
+    return sorted.filter((team) => {
+      if (!team.division_id || seen.has(team.division_id)) return false
+      seen.add(team.division_id)
+      return true
+    })
+  }
+  const byDivision = new Map()
+  sorted.forEach((team) => {
+    const key = team.division_id || 'sin-division'
+    byDivision.set(key, [...(byDivision.get(key) || []), team])
+  })
+  return [...byDivision.values()].flatMap((rows) => rows.slice(0, 2))
+}
+
 export async function saveNovaChampionsMatch(form) {
   const previous = await readRecord('nova_champions_matches', form.id)
   const home = form.home_score === '' || form.home_score == null ? null : Number(form.home_score)
@@ -839,12 +954,13 @@ export async function saveMatchLineups({ match, presentPlayers, captains }) {
 
 export async function saveMatchReport(form) {
   const previous = await supabase.from('match_reports').select('*').eq('match_id', form.match_id).maybeSingle()
+  const reportData = buildOfficialReportData(form, previous.data)
   const result = await supabase.from('match_reports').upsert({
     id: form.id || undefined,
     match_id: form.match_id,
     referee_name: form.referee_name || null,
     observations: form.observations || null,
-    report_data: form.report_data || null,
+    report_data: reportData,
     home_captain_signature: form.home_captain_signature || null,
     away_captain_signature: form.away_captain_signature || null,
     referee_signature: form.referee_signature || null,
@@ -852,6 +968,34 @@ export async function saveMatchReport(form) {
     status: form.status || 'draft',
   }, { onConflict: 'match_id' }).select().single()
   return auditResult(result, { action: form.status === 'finalized' ? 'finalize_report' : 'save_report', module: 'match_sheet', entityTable: 'match_reports', previousValue: previous.data || null })
+}
+
+function buildOfficialReportData(form, previous) {
+  const previousData = previous?.report_data || {}
+  const nextVersion = form.status === 'finalized' ? Number(previousData.version || 0) + 1 : Number(previousData.version || 1)
+  const folio = previousData.folio || `NOVA-F05-${String(form.match_id || '').slice(0, 8).toUpperCase()}`
+  const verificationCode = previousData.verification_code || `NV-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+  const versions = [...(previousData.versions || [])]
+
+  if (form.status === 'finalized' && previous) {
+    versions.push({
+      version: previousData.version || 1,
+      status: previous.status,
+      observations: previous.observations,
+      saved_at: new Date().toISOString(),
+    })
+  }
+
+  return {
+    ...previousData,
+    ...(form.report_data || {}),
+    folio,
+    verification_code: verificationCode,
+    verification_url: `/match/${form.match_id}`,
+    version: nextVersion,
+    versions: versions.slice(-10),
+    finalized_at: form.status === 'finalized' ? new Date().toISOString() : previousData.finalized_at || null,
+  }
 }
 
 export async function saveDigitalMatchEvent(form) {
@@ -987,6 +1131,7 @@ export async function approveOfficialMatch({ match, report }) {
         report_data: {
           ...(report.report_data || {}),
           officialized_at: new Date().toISOString(),
+          official_version: report.report_data?.version || 1,
         },
       })
       .eq('id', report.id)

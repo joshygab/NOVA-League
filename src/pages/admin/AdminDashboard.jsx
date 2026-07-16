@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveFinanceEntry, saveGoal, saveLeagueSettings, saveMatch, saveMatchAssignment, saveNews, saveNotification, saveNovaChampionsHistory, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveReferee, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, saveVenue, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, classifyNovaChampionsTeams, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveFinanceEntry, saveGoal, saveLeagueSettings, saveMatch, saveMatchAssignment, saveNews, saveNotification, saveNovaChampionsHistory, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveReferee, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, saveVenue, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import { hasPermission, permissions } from '../../lib/permissions'
@@ -9,6 +9,9 @@ import PageTitle from '../../components/PageTitle'
 import PlayoffBracket from '../../components/PlayoffBracket'
 import StandingsTable from '../../components/StandingsTable'
 import { goalTypes, playoffStageLabel } from '../../lib/labels'
+import { buildQualityReport } from '../../lib/qualityChecks'
+import { clearOfflineQueue, readOfflineQueue, removeOfflineAction } from '../../lib/offlineQueue'
+import { syncOfflineQueue } from '../../lib/offlineSync'
 import MatchSheetAdmin from './MatchSheetAdmin'
 import NovaIdScannerAdmin from './NovaIdScannerAdmin'
 
@@ -127,6 +130,8 @@ export default function AdminDashboard({ league }) {
         {tab === 'noticias' && <NewsForm busy={busy} run={run} news={league.news} />}
         {tab === 'finanzas' && <FinanceAdmin busy={busy} run={run} league={league} />}
         {tab === 'nova media' && <NovaMediaAdmin busy={busy} run={run} league={league} />}
+        {tab === 'sin conexión' && <OfflineCenterAdmin />}
+        {tab === 'calidad' && <QualityCenterAdmin league={league} setTab={setTab} />}
         {tab === 'tabla' && <StandingsTable standings={league.standings} />}
         </section>
       </div>
@@ -143,10 +148,10 @@ export default function AdminDashboard({ league }) {
 
 function sectionForTool(tab) {
   if (['partidos-form', 'revisión de actas', 'canchas y árbitros', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
-  if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias', 'nova media', 'finanzas'].includes(tab)) return 'equipos'
+  if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias', 'nova media', 'finanzas', 'calidad'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones', 'plantillas', 'equipo de la jornada'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
-  if (['bitacora'].includes(tab)) return 'dashboard'
+  if (['bitacora', 'sin conexión'].includes(tab)) return 'dashboard'
   return 'dashboard'
 }
 
@@ -172,6 +177,8 @@ function adminTitle(tab) {
     'sanciones-form': 'Gestionar Sanciones',
     finanzas: 'Finanzas',
     'nova media': 'NOVA Media',
+    'sin conexión': 'Modo Sin Conexión',
+    calidad: 'Centro de Calidad',
   }
   return titles[tab] || tab
 }
@@ -235,6 +242,7 @@ function AdminSummary({ league, setTab, run, busy, can }) {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {can(permissions.MATCH_CAPTURE) && <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />}
+        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Modo Árbitro" text="Reloj y pase QR" onClick={() => navigate('/admin/arbitro')} />}
         {can(permissions.MATCH_REVIEW) && <AdminAction title="Revisar actas" text="Publicar resultado oficial" onClick={() => setTab('revisión de actas')} />}
         {can(permissions.MATCH_REVIEW) && <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos-form')} />}
         {can(permissions.PLAYERS_MANAGE) && <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />}
@@ -242,6 +250,8 @@ function AdminSummary({ league, setTab, run, busy, can }) {
         {can(permissions.AUDIT_READ) && <AdminAction title="Bitácora" text="Acciones recientes" onClick={() => setTab('bitacora')} />}
         {can(permissions.FINANCE_MANAGE) && <AdminAction title="Finanzas" text="Pagos y adeudos" onClick={() => setTab('finanzas')} />}
         {can(permissions.MEDIA_MANAGE) && <AdminAction title="NOVA Media" text="Noticias y avisos" onClick={() => setTab('nova media')} />}
+        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Sin conexión" text="Eventos pendientes" onClick={() => setTab('sin conexión')} />}
+        {can(permissions.SETTINGS_MANAGE) && <AdminAction title="Calidad" text="Revisar temporada" onClick={() => setTab('calidad')} />}
       </section>
 
       {can(permissions.SETTINGS_MANAGE) && <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />}
@@ -1147,10 +1157,16 @@ function NovaChampionsAdmin({ run, busy, league }) {
   const [statForm, setStatForm] = useState(emptyChampionsStat)
   const [historyForm, setHistoryForm] = useState(emptyChampionsHistory)
   const [drawMode, setDrawMode] = useState('ranking')
+  const [qualificationRule, setQualificationRule] = useState('top2_division')
+  const [drawPreview, setDrawPreview] = useState([])
   const qualifiedIds = new Set(cup.qualifiedTeams.map((row) => row.team_id))
   const qualifiedTeams = league.teams.filter((team) => qualifiedIds.has(team.id)).map((team) => {
     const standingsRow = league.standings.find((row) => row.id === team.id)
-    return { ...team, seed: standingsRow?.position || 999, points: standingsRow?.points || 0 }
+    return { ...team, seed: standingsRow?.position || 999, position: standingsRow?.position || 999, points: standingsRow?.points || 0 }
+  })
+  const rankedTeams = league.teams.map((team) => {
+    const standingsRow = league.standings.find((row) => row.id === team.id)
+    return { ...team, seed: standingsRow?.position || 999, position: standingsRow?.position || 999, points: standingsRow?.points || 0 }
   })
   const selectedMatch = cup.matches.find((match) => match.id === statForm.match_id)
   const matchTeamIds = selectedMatch ? [selectedMatch.home_team_id, selectedMatch.away_team_id] : []
@@ -1180,15 +1196,27 @@ function NovaChampionsAdmin({ run, busy, league }) {
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="button-secondary" disabled={busy} onClick={() => run(() => saveNovaChampionsSettings(settings), 'Configuración de copa guardada')}>Guardar estado</button>
+          <button className="button-secondary" disabled={busy || qualifiedTeams.length < Number(settings.format)} onClick={() => setDrawPreview(buildDrawPreview(qualifiedTeams, settings.format, drawMode))}>Previsualizar sorteo</button>
           <button className="button" disabled={busy} onClick={() => run(() => generateNovaChampionsBracket({ teams: qualifiedTeams, seasonId: settings.season_id, format: settings.format, mode: drawMode }), 'Bracket generado')}>GENERAR TORNEO</button>
         </div>
+        {drawPreview.length > 0 && (
+          <div className="mt-4 rounded-lg border border-gold/20 bg-gold/10 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-gold">Sorteo preliminar</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {drawPreview.map((match) => <p key={match.order} className="rounded-lg bg-black/60 px-3 py-2 text-sm">#{match.order} {match.home?.name || 'Equipo'} vs {match.away?.name || 'Equipo'}</p>)}
+            </div>
+          </div>
+        )}
       </div>
 
       <section className="grid gap-6 lg:grid-cols-[.85fr_1.15fr]">
         <div className="panel p-5">
           <h3 className="text-lg font-black">Equipos clasificados</h3>
           <p className="mt-1 text-sm text-slate-400">Selección manual. En el futuro se puede automatizar por Top 2, Top 4 o campeones.</p>
-          <button className="button-secondary mt-3" disabled>Clasificar automáticamente</button>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+            <Select label="Regla automática" value={qualificationRule} onChange={setQualificationRule} options={[{ id: 'top2_division', name: 'Top 2 de cada división' }, { id: 'top4_general', name: 'Top 4 general' }, { id: 'division_champions', name: 'Campeones de división' }]} />
+            <button className="button-secondary self-end" disabled={busy} onClick={() => run(() => classifyNovaChampionsTeams({ teams: rankedTeams, seasonId: settings.season_id, rule: qualificationRule }), 'Clasificados actualizados')}>Clasificar automáticamente</button>
+          </div>
           <div className="mt-4 max-h-[520px] space-y-2 overflow-y-auto pr-1">
             {league.teams.map((team) => (
               <label key={team.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
@@ -1246,6 +1274,21 @@ function NovaChampionsAdmin({ run, busy, league }) {
       </AdminGrid>
     </section>
   )
+}
+
+function buildDrawPreview(teams, format, mode) {
+  const size = Number(format)
+  const selected = mode === 'random'
+    ? [...teams].sort(() => Math.random() - 0.5).slice(0, size)
+    : [...teams].sort((a, b) => Number(a.seed || 999) - Number(b.seed || 999) || Number(b.points || 0) - Number(a.points || 0)).slice(0, size)
+  const top = selected.slice(0, size / 2)
+  const pot = selected.slice(size / 2)
+  return top.map((team, index) => {
+    let opponentIndex = pot.findIndex((candidate) => candidate.division_id !== team.division_id)
+    if (opponentIndex < 0) opponentIndex = 0
+    const [opponent] = pot.splice(opponentIndex, 1)
+    return { order: index + 1, home: team, away: opponent }
+  })
 }
 
 function CardForm({ run, busy, league }) {
@@ -1353,6 +1396,127 @@ function NovaMediaAdmin({ league, run, busy }) {
         <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={notification.requires_ack} onChange={(event) => setNotification({ ...notification, requires_ack: event.target.checked })} /> Requiere confirmación de lectura</label>
         <button className="button" disabled={busy || !notification.title || !notification.body} onClick={() => run(() => saveNotification(notification), 'Aviso publicado')}>Publicar aviso</button>
       </AdminGrid>
+    </section>
+  )
+}
+
+function OfflineCenterAdmin() {
+  const [rows, setRows] = useState(readOfflineQueue())
+  const [syncing, setSyncing] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    function refresh() {
+      setRows(readOfflineQueue())
+    }
+    window.addEventListener('nova-offline-queue', refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener('nova-offline-queue', refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  useEffect(() => {
+    async function autoSync() {
+      if (!navigator.onLine || readOfflineQueue().length === 0) return
+      setSyncing(true)
+      const result = await syncOfflineQueue()
+      setSyncing(false)
+      setRows(readOfflineQueue())
+      if (result.synced > 0 || result.failed > 0) setMessage(`${result.synced} sincronizado(s), ${result.failed} pendiente(s).`)
+    }
+    window.addEventListener('online', autoSync)
+    autoSync()
+    return () => window.removeEventListener('online', autoSync)
+  }, [])
+
+  async function syncNow() {
+    setSyncing(true)
+    setMessage('')
+    const result = await syncOfflineQueue()
+    setSyncing(false)
+    setRows(readOfflineQueue())
+    setMessage(result.error || `${result.synced} evento(s) sincronizado(s), ${result.failed} pendiente(s).`)
+  }
+
+  return (
+    <section className="space-y-5">
+      <div className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Modo cancha</p>
+        <h2 className="mt-2 text-2xl font-black">Eventos sin conexión</h2>
+        <p className="mt-1 text-sm text-slate-400">Si el internet falla, el acta guarda eventos aquí para que no se pierdan.</p>
+      </div>
+      <div className="panel p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-lg font-black">{rows.length} pendiente(s)</h3>
+          <div className="flex flex-wrap gap-2">
+            <button className="button" disabled={syncing || rows.length === 0} onClick={syncNow}>{syncing ? 'Sincronizando...' : 'Sincronizar ahora'}</button>
+            <button className="button-secondary" onClick={() => { clearOfflineQueue(); setRows([]); setMessage('Cola local limpiada.') }}>Limpiar cola</button>
+          </div>
+        </div>
+        {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">{message}</p>}
+        <div className="space-y-2">
+          {rows.map((item) => (
+            <div key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-black">{item.type}</p>
+                  <p className="text-xs text-slate-400">{new Date(item.created_at).toLocaleString('es-MX')} · {item.status || 'pending'}</p>
+                  {item.last_error && <p className="mt-1 text-xs text-red-200">{item.last_error}</p>}
+                </div>
+                <button className="button-secondary" onClick={() => setRows(removeOfflineAction(item.id))}>Marcar resuelto</button>
+              </div>
+              <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(item.payload, null, 2)}</pre>
+            </div>
+          ))}
+          {rows.length === 0 && <p className="text-sm text-slate-400">No hay eventos pendientes en este dispositivo.</p>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function QualityCenterAdmin({ league, setTab }) {
+  const report = buildQualityReport(league)
+  const assistant = [
+    ['Crear temporada', league.seasonHistory.length > 0],
+    ['Crear divisiones', league.divisions.length > 0],
+    ['Registrar equipos', league.teams.length > 0],
+    ['Aprobar jugadores', league.players.some((player) => player.approval_status === 'approved')],
+    ['Configurar canchas', (league.venues || []).length > 0],
+    ['Registrar árbitros', (league.referees || []).length > 0],
+    ['Crear calendario', league.matches.length > 0],
+    ['Publicar resultados oficiales', league.matches.some((match) => match.status === 'official')],
+  ]
+
+  return (
+    <section className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <AdminMetric label="Equipos" value={report.metrics.teams} />
+        <AdminMetric label="Jugadores activos" value={report.metrics.players} />
+        <AdminMetric label="Alertas" value={report.metrics.unresolvedIssues} />
+      </div>
+      <section className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]">
+        <div className="panel p-5">
+          <h2 className="text-xl font-black">Asistente de temporada</h2>
+          <div className="mt-4 space-y-2">
+            {assistant.map(([label, done]) => <p key={label} className={`rounded-lg border px-3 py-2 text-sm ${done ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100' : 'border-gold/30 bg-gold/10 text-gold'}`}>{done ? '✓' : '•'} {label}</p>)}
+          </div>
+        </div>
+        <div className="panel p-5">
+          <h2 className="text-xl font-black">Centro de calidad</h2>
+          <div className="mt-4 space-y-2">
+            {report.issues.slice(0, 24).map((issue) => (
+              <button key={issue.id} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm transition hover:border-gold/40" onClick={() => setTab(issue.module === 'jugadores' ? 'jugadores' : issue.module === 'equipos' ? 'equipos' : issue.module === 'partidos' ? 'partidos' : issue.module === 'sanciones' ? 'sanciones' : 'dashboard')}>
+                <span className="font-black text-gold">{issue.type}</span>
+                <span className="block text-slate-300">{issue.label}</span>
+              </button>
+            ))}
+            {report.issues.length === 0 && <p className="text-sm text-slate-400">Todo se ve limpio por ahora.</p>}
+          </div>
+        </div>
+      </section>
     </section>
   )
 }

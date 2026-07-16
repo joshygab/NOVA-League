@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BarChart3, CalendarDays, Crown, Goal, History, Home, IdCard, LogIn, LogOut, Menu, Shield, ShieldCheck, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Crown, Goal, History, Home, IdCard, LogIn, LogOut, Menu, Shield, ShieldCheck, Sparkles, Swords, Trophy, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 
 const nav = [
@@ -15,6 +15,7 @@ const nav = [
   { to: '/equipos', label: 'Equipos', icon: Shield },
   { to: '/jugadores', label: 'Jugadores', icon: Users },
   { to: '/estadisticas', label: 'Estadísticas', icon: BarChart3 },
+  { to: '/simulador', label: 'Simulador', icon: Sparkles },
   { to: '/historial', label: 'Historial', icon: History },
 ]
 
@@ -57,6 +58,7 @@ export default function Layout({ league }) {
           {user ? (
             <div className="hidden items-center gap-2 lg:flex">
               <NavLink to="/perfil" className="button-secondary"><UserRound size={16} />Mi Perfil</NavLink>
+              <NavLink to="/mi-jornada" className="button-secondary"><CalendarDays size={16} />Mi Jornada</NavLink>
               <NavLink to="/nova-id" className="button-secondary"><IdCard size={16} />NOVA ID</NavLink>
               <NavLink to="/capitan" className="button-secondary"><ShieldCheck size={16} />Capitán</NavLink>
               <button className="button" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>
@@ -83,6 +85,7 @@ export default function Layout({ league }) {
               {user ? (
                 <>
                   <NavItem to="/perfil" label="Mi Perfil" icon={UserRound} onClick={() => setMenuOpen(false)} />
+                  <NavItem to="/mi-jornada" label="Mi Jornada" icon={CalendarDays} onClick={() => setMenuOpen(false)} />
                   <NavItem to="/nova-id" label="NOVA ID" icon={IdCard} onClick={() => setMenuOpen(false)} />
                   <NavItem to="/capitan" label="Capitán" icon={ShieldCheck} onClick={() => setMenuOpen(false)} />
                   <button className="button-secondary justify-start" onClick={handleSignOut}><LogOut size={16} />Cerrar sesión</button>

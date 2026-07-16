@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Shield, Star, Target, Trophy } from 'lucide-react'
 import Badge from '../components/Badge'
 import Crest from '../components/Crest'
@@ -97,7 +98,7 @@ function HeroStat({ icon: Icon, label, value }) {
 }
 
 function ChampionsMatches({ matches, league }) {
-  return <section className="grid gap-3">{matches.map((match) => <article key={match.id} className="rounded-lg border border-gold/20 bg-black/80 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{match.round}</p><h3 className="mt-2 text-xl font-black">{league.teamsById.get(match.home_team_id)?.name || 'Por definir'} vs {league.teamsById.get(match.away_team_id)?.name || 'Por definir'}</h3><p className="text-sm text-slate-400">{match.match_date ? new Date(match.match_date).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Fecha por definir'} · {match.venue || 'Cancha por definir'}</p></article>)}</section>
+  return <section className="grid gap-3">{matches.map((match) => <article key={match.id} className="rounded-lg border border-gold/20 bg-black/80 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{match.round}</p><h3 className="mt-2 text-xl font-black">{league.teamsById.get(match.home_team_id)?.name || 'Por definir'} vs {league.teamsById.get(match.away_team_id)?.name || 'Por definir'}</h3><p className="text-sm text-slate-400">{match.match_date ? new Date(match.match_date).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Fecha por definir'} · {match.venue || 'Cancha por definir'}</p><Link className="button-secondary mt-3" to={`/match/${match.id}`}>Abrir Match Center</Link></article>)}</section>
 }
 
 function ChampionsStats({ stats }) {
@@ -108,7 +109,7 @@ function StatList({ title, rows }) {
   return <article className="rounded-lg border border-gold/20 bg-black/80 p-5"><h2 className="text-xl font-black">{title}</h2><div className="mt-4 space-y-2">{rows.length ? rows.map((row) => <p key={`${title}-${row.id}`} className="flex justify-between rounded-lg bg-white/5 px-3 py-2"><span>{row.name}</span><b className="text-gold">{row.value}</b></p>) : <p className="text-sm text-slate-400">Sin registros.</p>}</div></article>
 }
 
-function ChampionsHistory({ history, league }) {
+function ChampionsHistory({ history, league, records }) {
   return <section className="space-y-6"><div className="space-y-3">{history.length ? history.map((item) => <article key={item.id} className="rounded-lg border border-gold/20 bg-black/80 p-5"><p className="text-gold">{item.season_id}</p><h3 className="text-2xl font-black">🏆 {league.teamsById.get(item.champion_team_id)?.name || 'Campeón'}</h3><p className="text-sm text-slate-400">Final: {item.final_score || 'Por registrar'}</p></article>) : <p className="rounded-lg border border-white/10 bg-black/70 p-5 text-slate-400">El museo de campeones se llenará al publicar la primera final.</p>}</div><ChampionsRecords records={records} /></section>
 }
 

@@ -3,6 +3,8 @@ import { Clock, FileText, Printer, Save, Search, ShieldCheck } from 'lucide-reac
 import MatchCard from '../../components/MatchCard'
 import { deleteDigitalMatchEvent, finalizeDigitalMatch, saveDigitalMatchEvent, saveMatchLineups, saveMatchReport } from '../../lib/adminApi'
 import { goalTypes } from '../../lib/labels'
+import { queueOfflineAction, readOfflineQueue } from '../../lib/offlineQueue'
+import { syncOfflineQueue } from '../../lib/offlineSync'
 
 const steps = ['Confirmar', 'Partido', 'Resumen', 'Firmas']
 const quickEvents = [
@@ -35,6 +37,7 @@ export default function MatchSheetAdmin({ league, run, busy }) {
   const [activeTeam, setActiveTeam] = useState('home')
   const [activeEvent, setActiveEvent] = useState('')
   const [published, setPublished] = useState(false)
+  const [online, setOnline] = useState(navigator.onLine)
   const savedTimer = existingReport?.report_data?.timer || {}
   const [timer, setTimer] = useState({ seconds: savedTimer.seconds || 0, period: savedTimer.period || '1T', running: false, extra: savedTimer.extra || 0 })
 
@@ -79,6 +82,22 @@ export default function MatchSheetAdmin({ league, run, busy }) {
     if (matchId) persistTimer(matchId, timer)
   }, [matchId, timer])
 
+  useEffect(() => {
+    async function updateOnline() {
+      setOnline(navigator.onLine)
+      if (navigator.onLine && readOfflineQueue().length > 0) {
+        await syncOfflineQueue()
+        league.reload?.()
+      }
+    }
+    window.addEventListener('online', updateOnline)
+    window.addEventListener('offline', updateOnline)
+    return () => {
+      window.removeEventListener('online', updateOnline)
+      window.removeEventListener('offline', updateOnline)
+    }
+  }, [])
+
   function togglePlayer(playerId) {
     const next = new Set(presentIds)
     if (next.has(playerId)) next.delete(playerId)
@@ -102,7 +121,14 @@ export default function MatchSheetAdmin({ league, run, busy }) {
 
   async function addEvent(type = eventForm.event_type) {
     if (!match) return
-    await run(() => saveDigitalMatchEvent({ ...eventForm, event_type: type, minute: eventForm.minute || currentMinute(timer), match_id: match.id, division_id: match.division_id }), 'Evento guardado')
+    const payload = { ...eventForm, event_type: type, minute: eventForm.minute || currentMinute(timer), match_id: match.id, division_id: match.division_id }
+    if (!online) {
+      queueOfflineAction({ type: 'match_event', payload })
+      setEventForm({ event_type: type, team_id: '', player_id: '', related_player_id: '', minute: '', goal_type: 'open_play', detail: '' })
+      setActiveEvent('')
+      return
+    }
+    await run(() => saveDigitalMatchEvent(payload), 'Evento guardado')
     setEventForm({ event_type: type, team_id: '', player_id: '', related_player_id: '', minute: '', goal_type: 'open_play', detail: '' })
     setActiveEvent('')
   }
@@ -129,6 +155,7 @@ export default function MatchSheetAdmin({ league, run, busy }) {
           <div>
             <h2 className="text-2xl font-black">Acta Digital de Partido</h2>
             <p className="text-sm text-gold">Si no hay internet, usa la hoja NOVA-F04 como respaldo.</p>
+            {!online && <p className="mt-2 rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm text-gold">Sin conexión: los eventos se guardarán en este dispositivo para sincronizarlos después.</p>}
           </div>
           <button className="button-secondary" onClick={printReport}><Printer size={16} />PDF</button>
         </div>
@@ -434,6 +461,10 @@ function PrintableReport({ match, league, homeScore, awayScore, goals, cards, ev
   const home = league.teamsById.get(match.home_team_id)
   const away = league.teamsById.get(match.away_team_id)
   const division = league.divisionsById.get(match.division_id)
+  const reportData = report.report_data || {}
+  const folio = reportData.folio || `NOVA-F05-${String(match.id).slice(0, 8).toUpperCase()}`
+  const verification = reportData.verification_code || 'Pendiente'
+  const version = reportData.version || 1
   const rows = (title, items) => (
     <section style={{ marginTop: 18 }}>
       <h3 style={{ borderBottom: '1px solid #111827', paddingBottom: 4 }}>{title}</h3>
@@ -442,32 +473,46 @@ function PrintableReport({ match, league, homeScore, awayScore, goals, cards, ev
   )
 
   return (
-    <article className="print-only" style={{ padding: 32, fontFamily: 'Arial, sans-serif' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #111827', paddingBottom: 16 }}>
+    <article className="print-only" style={{ padding: 30, fontFamily: 'Arial, sans-serif', color: '#111827' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', borderBottom: '4px solid #111827', paddingBottom: 16 }}>
         <div>
-          <p style={{ margin: 0, fontWeight: 800 }}>NOVA League</p>
+          <p style={{ margin: 0, fontWeight: 900, letterSpacing: 2 }}>NOVA LEAGUE</p>
           <h1 style={{ margin: '6px 0 0', fontSize: 28 }}>NOVA-F05 - Cédula Oficial del Partido</h1>
+          <p style={{ margin: '6px 0 0', fontSize: 12 }}>Folio: <b>{folio}</b> · Versión: <b>{version}</b></p>
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ minWidth: 170, border: '2px solid #111827', padding: 10, textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 800 }}>QR / VERIFICACIÓN</p>
+          <div style={{ display: 'grid', placeItems: 'center', height: 76, margin: '8px auto', border: '1px dashed #111827', fontSize: 10 }}>
+            {verification}
+          </div>
+          <p style={{ margin: 0, fontSize: 10 }}>Abrir Match Center: /match/{match.id}</p>
+        </div>
+        <div style={{ textAlign: 'right', minWidth: 160 }}>
           <p style={{ margin: 0 }}>División: {division?.name || 'N/D'}</p>
           <p style={{ margin: 0 }}>Jornada: {match.round}</p>
-          <p style={{ margin: 0 }}>Fecha: {new Date(match.match_date).toLocaleDateString('es-MX')}</p>
+          <p style={{ margin: 0 }}>Fecha: {match.match_date ? new Date(match.match_date).toLocaleDateString('es-MX') : 'N/D'}</p>
+          <p style={{ margin: 0 }}>Estado: {report.status || 'draft'}</p>
         </div>
       </header>
-      <section style={{ marginTop: 20, textAlign: 'center' }}>
-        <h2 style={{ fontSize: 24 }}>{home?.name} {homeScore} - {awayScore} {away?.name}</h2>
-        <p>Cancha: {report.venue || match.venue || 'N/D'} · Árbitro: {report.referee_name || 'N/D'}</p>
+      <section style={{ marginTop: 20, border: '2px solid #111827', padding: 16, textAlign: 'center' }}>
+        <p style={{ margin: 0, fontSize: 12, fontWeight: 800 }}>MARCADOR FINAL</p>
+        <h2 style={{ margin: '8px 0', fontSize: 28 }}>{home?.name} {homeScore} - {awayScore} {away?.name}</h2>
+        <p style={{ margin: 0 }}>Cancha: {report.venue || match.venue || 'N/D'} · Árbitro: {report.referee_name || 'N/D'} · Hora: {report.start_time || 'N/D'}</p>
       </section>
       {rows('Alineaciones', lineups.map((row) => `${league.teamsById.get(row.team_id)?.name}: ${league.playersById.get(row.player_id)?.name}${row.captain ? ' (Capitán)' : ''}`))}
       {rows('Goleadores', goals.map((goal) => `${goal.minute}' ${league.playersById.get(goal.player_id)?.name} - ${league.teamsById.get(goal.team_id)?.name}`))}
       {rows('Tarjetas', cards.map((card) => `${card.minute}' ${league.playersById.get(card.player_id)?.name} - ${card.type}`))}
       {rows('Incidencias', events.filter((event) => !['goal', 'assist'].includes(event.type)).map((event) => `${event.minute}' ${event.event_type || event.type} ${event.detail || ''}`))}
       {rows('Observaciones', [report.observations || 'Sin observaciones.'])}
+      {rows('Historial de versiones', (reportData.versions || []).map((item) => `Versión ${item.version} · ${item.status || 'draft'} · ${item.saved_at ? new Date(item.saved_at).toLocaleString('es-MX') : 'Sin fecha'}`))}
       <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, marginTop: 36 }}>
         <SignaturePrint title="Árbitro" src={signatures.referee_signature} />
         <SignaturePrint title="Capitán local" src={signatures.home_captain_signature} />
         <SignaturePrint title="Capitán visitante" src={signatures.away_captain_signature} />
       </section>
+      <footer style={{ marginTop: 28, borderTop: '1px solid #111827', paddingTop: 10, fontSize: 10 }}>
+        Documento generado por NOVA Admin. La aprobación administrativa convierte el resultado en oficial y actualiza estadísticas.
+      </footer>
     </article>
   )
 }

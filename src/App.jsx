@@ -24,8 +24,11 @@ import MyPlayerProfilePage from './pages/MyPlayerProfilePage'
 import NovaIdPage from './pages/NovaIdPage'
 import NovaIdPublicProfilePage from './pages/NovaIdPublicProfilePage'
 import CaptainZonePage from './pages/CaptainZonePage'
+import ClassificationSimulatorPage from './pages/ClassificationSimulatorPage'
+import MyMatchdayPage from './pages/MyMatchdayPage'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import RefereeModePage from './pages/admin/RefereeModePage'
 import { useAuth } from './lib/AuthContext'
 
 export default function App() {
@@ -66,11 +69,13 @@ export default function App() {
         <Route path="/jugadores/:id" element={<PlayerProfilePage league={publicLeague} />} />
         <Route path="/goleadores" element={<ScorersPage league={publicLeague} />} />
         <Route path="/estadisticas" element={<StatsPage league={publicLeague} />} />
+        <Route path="/simulador" element={<ClassificationSimulatorPage league={publicLeague} />} />
         <Route path="/historial" element={<HistoryPage league={publicLeague} />} />
         <Route path="/noticias" element={<NewsPage league={publicLeague} />} />
         <Route path="/registro" element={<PlayerRegisterPage league={league} />} />
         <Route path="/login" element={<PlayerLoginPage />} />
         <Route path="/perfil" element={<MyPlayerProfilePage league={league} />} />
+        <Route path="/mi-jornada" element={<MyMatchdayPage league={league} />} />
         <Route path="/nova-id" element={<NovaIdPage league={league} />} />
         <Route path="/capitan" element={<CaptainZonePage league={league} />} />
         <Route path="/nova-id/:novaId" element={<NovaIdPublicProfilePage league={publicLeague} />} />
@@ -82,6 +87,14 @@ export default function App() {
         element={
           <AdminRoute>
             <AdminDashboard league={league} />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/arbitro"
+        element={
+          <AdminRoute>
+            <RefereeModePage league={league} />
           </AdminRoute>
         }
       />

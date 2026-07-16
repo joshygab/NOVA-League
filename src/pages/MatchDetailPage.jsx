@@ -12,8 +12,9 @@ import { calculateNovaRating } from '../lib/playerProgression'
 export default function MatchDetailPage({ league }) {
   const { id, matchId } = useParams()
   const targetId = matchId || id
-  const match = league.matches.find((item) => item.id === targetId)
+  const match = league.matches.find((item) => item.id === targetId) || league.novaChampions?.matches?.find((item) => item.id === targetId)
   if (!match) return <Navigate to="/partidos" replace />
+  const isChampions = !league.matches.some((item) => item.id === targetId)
 
   const home = league.teamsById.get(match.home_team_id)
   const away = league.teamsById.get(match.away_team_id)
@@ -23,8 +24,9 @@ export default function MatchDetailPage({ league }) {
   const standings = league.divisionTables.find((item) => item.id === division?.id)?.standings || []
   const homeStanding = standings.find((team) => team.id === home?.id)
   const awayStanding = standings.find((team) => team.id === away?.id)
-  const matchGoals = league.goals.filter((goal) => goal.match_id === match.id)
-  const cards = league.cards.filter((card) => card.match_id === match.id)
+  const cupStats = league.novaChampions?.stats?.filter((row) => row.match_id === match.id) || []
+  const matchGoals = isChampions ? cupStats.filter((row) => row.stat_type === 'goal') : league.goals.filter((goal) => goal.match_id === match.id)
+  const cards = isChampions ? cupStats.filter((row) => row.stat_type?.includes('card')).map((row) => ({ ...row, type: row.stat_type === 'yellow_card' ? 'yellow' : 'red' })) : league.cards.filter((card) => card.match_id === match.id)
   const events = league.events.filter((event) => event.match_id === match.id)
   const report = league.reports.find((item) => item.match_id === match.id)
   const lineups = league.lineups.filter((lineup) => lineup.match_id === match.id)
@@ -39,7 +41,7 @@ export default function MatchDetailPage({ league }) {
 
   return (
     <>
-      <PageTitle kicker="Match Center" title={`${home?.name || 'Local'} vs ${away?.name || 'Visitante'}`} />
+      <PageTitle kicker={isChampions ? 'Match Center · NOVA Champions Cup' : 'Match Center'} title={`${home?.name || 'Local'} vs ${away?.name || 'Visitante'}`} />
       <div className="space-y-6">
         <section className="overflow-hidden rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
@@ -55,7 +57,7 @@ export default function MatchDetailPage({ league }) {
             </div>
             <TeamHero team={away} standing={awayStanding} />
           </div>
-          <p className="mt-5 text-center text-sm text-slate-400">{division?.name}</p>
+          <p className="mt-5 text-center text-sm text-slate-400">{isChampions ? 'NOVA Champions Cup' : division?.name}</p>
         </section>
 
         {!played && (
