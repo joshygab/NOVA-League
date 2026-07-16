@@ -1,7 +1,7 @@
 import { supabase, hasSupabaseConfig } from './supabase'
-import { mockCards, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockNovaChampionsHistory, mockNovaChampionsMatches, mockNovaChampionsQualifiedTeams, mockNovaChampionsSettings, mockNovaChampionsStats, mockPlayers, mockPlayoffMatches, mockPlayoffSettings, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
+import { mockCards, mockChampionHistory, mockChampionSpotlight, mockDivisions, mockEvents, mockGallery, mockGoals, mockLeagueSettings, mockMatches, mockNews, mockNovaChampionsHistory, mockNovaChampionsMatches, mockNovaChampionsQualifiedTeams, mockNovaChampionsSettings, mockNovaChampionsStats, mockPlayers, mockPlayoffMatches, mockPlayoffSettings, mockSanctions, mockSeasonHistory, mockTeams } from './mockData'
 
-const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'match_lineups', 'match_reports', 'match_roster', 'sanctions', 'playoff_matches', 'playoff_settings', 'news', 'gallery', 'user_profiles', 'nova_champions_settings', 'nova_champions_qualified_teams', 'nova_champions_matches', 'nova_champions_stats', 'nova_champions_champions_history']
+const tables = ['league_settings', 'divisions', 'season_history', 'teams', 'players', 'matches', 'goals', 'match_events', 'match_cards', 'match_lineups', 'match_reports', 'match_roster', 'sanctions', 'playoff_matches', 'playoff_settings', 'news', 'gallery', 'user_profiles', 'nova_champions_settings', 'nova_champions_qualified_teams', 'nova_champions_matches', 'nova_champions_stats', 'nova_champions_champions_history', 'champion_spotlight', 'champion_history']
 
 export async function fetchLeagueData() {
   if (!hasSupabaseConfig) {
@@ -29,11 +29,13 @@ export async function fetchLeagueData() {
         stats: mockNovaChampionsStats,
         history: mockNovaChampionsHistory,
       },
+      championSpotlight: mockChampionSpotlight,
+      championHistory: mockChampionHistory,
       settings: mockLeagueSettings,
     }
   }
 
-  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory] = await Promise.all([
+  const [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory, championSpotlight, championHistory] = await Promise.all([
     supabase.from('league_settings').select('*').eq('id', 1).maybeSingle(),
     supabase.from('divisions').select('*').order('level'),
     supabase.from('season_history').select('*').order('created_at', { ascending: false }),
@@ -56,9 +58,11 @@ export async function fetchLeagueData() {
     supabase.from('nova_champions_matches').select('*').order('round').order('match_order'),
     supabase.from('nova_champions_stats').select('*').order('minute'),
     supabase.from('nova_champions_champions_history').select('*').order('created_at', { ascending: false }),
+    supabase.from('champion_spotlight').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('champion_history').select('*').order('created_at', { ascending: false }),
   ])
 
-  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory].find((result) => result.error)?.error
+  const error = [settings, divisions, seasonHistory, teams, players, matches, goals, events, cards, lineups, reports, matchRoster, sanctions, playoffMatches, playoffSettings, news, gallery, championsSettings, championsQualifiedTeams, championsMatches, championsStats, championsHistory, championSpotlight, championHistory].find((result) => result.error)?.error
   if (error) throw error
 
   return {
@@ -85,6 +89,8 @@ export async function fetchLeagueData() {
       stats: championsStats.data ?? [],
       history: championsHistory.data ?? [],
     },
+    championSpotlight: championSpotlight.data ?? mockChampionSpotlight,
+    championHistory: championHistory.data ?? [],
     settings: settings.data ?? mockLeagueSettings,
   }
 }

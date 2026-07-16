@@ -104,3 +104,17 @@ export const mockNovaChampionsQualifiedTeams = []
 export const mockNovaChampionsMatches = []
 export const mockNovaChampionsStats = []
 export const mockNovaChampionsHistory = []
+
+export const mockChampionSpotlight = {
+  id: 1,
+  is_active: false,
+  display_mode: 'home_section',
+  tournament_name: 'NOVA Champions Cup 2026',
+  season_label: 'Temporada 2026',
+  champion_team_id: '',
+  champion_photo_url: '',
+  message_title: '¡Felicidades, campeones!',
+  message_body: 'Han conquistado la gloria de NOVA.',
+}
+
+export const mockChampionHistory = []

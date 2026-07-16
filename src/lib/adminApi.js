@@ -117,6 +117,46 @@ export async function saveLeagueSettings(form) {
   return supabase.from('league_settings').upsert(payload).select().single()
 }
 
+export async function saveChampionSpotlight(form) {
+  const existing = await supabase.from('champion_spotlight').select('*').eq('id', 1).maybeSingle()
+  if (existing.error) return existing
+
+  const previous = existing.data
+  const championChanged = previous?.champion_team_id && (
+    previous.champion_team_id !== form.champion_team_id ||
+    previous.tournament_name !== form.tournament_name ||
+    previous.season_label !== form.season_label
+  )
+
+  if (championChanged) {
+    const history = await supabase.from('champion_history').insert({
+      tournament_name: previous.tournament_name,
+      season_label: previous.season_label,
+      champion_team_id: previous.champion_team_id,
+      champion_photo_url: previous.champion_photo_url,
+      message_title: previous.message_title,
+      message_body: previous.message_body,
+    })
+    if (history.error) return history
+  }
+
+  const payload = {
+    id: 1,
+    is_active: Boolean(form.is_active),
+    display_mode: form.display_mode || 'home_section',
+    tournament_name: form.tournament_name,
+    season_label: form.season_label || null,
+    champion_team_id: form.champion_team_id || null,
+    champion_photo_url: form.champion_photo_url || null,
+    message_title: form.message_title || null,
+    message_body: form.message_body || null,
+  }
+  if (form.championPhotoFile) {
+    payload.champion_photo_url = await uploadPublicFile('league-assets', `champions/${crypto.randomUUID()}-${form.championPhotoFile.name}`, form.championPhotoFile)
+  }
+  return supabase.from('champion_spotlight').upsert(payload).select().single()
+}
+
 export async function savePlayer(form) {
   if (!form.team_id) return { error: { message: 'Selecciona un equipo para el jugador.' } }
   const payload = {

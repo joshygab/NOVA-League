@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { ArrowRight, Radio, ShieldCheck, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import ChampionSpotlight from '../components/ChampionSpotlight'
 import MatchCard from '../components/MatchCard'
 import StatCard from '../components/StatCard'
 import StandingsTable from '../components/StandingsTable'
@@ -8,6 +9,9 @@ import StandingsTable from '../components/StandingsTable'
 export default function Home({ league }) {
   const nextMatches = league.matches.slice(0, 2)
   const settings = league.settings || {}
+  const championSpotlight = league.championSpotlight
+  const championTeam = championSpotlight?.champion_team_id ? league.teamsById.get(championSpotlight.champion_team_id) : null
+  const championMode = Boolean(championSpotlight?.is_active && championTeam)
 
   return (
     <div className="space-y-8">
@@ -35,28 +39,40 @@ export default function Home({ league }) {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
-        <div>
-          <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><ShieldCheck className="text-electric" /> Clasificación por división</div>
-          <div className="space-y-5">
-            {league.divisionTables.map((division) => (
-              <section key={division.id}>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h2 className="text-xl font-black">{division.name}</h2>
-                  <Link to={`/tabla?division=${division.slug || division.id}`} className="button-secondary min-h-9 px-3 py-1 text-xs">Ver completa</Link>
-                </div>
-                <StandingsTable standings={division.standings.slice(0, 5)} compact championsTeamIds={league.novaChampionsTeamIds} />
-              </section>
-            ))}
+      {championMode ? (
+        <section className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
+          <ChampionSpotlight spotlight={championSpotlight} team={championTeam} />
+          <div>
+            <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Sparkles className="text-gold" /> Próximos partidos</div>
+            <div className="space-y-4">
+              {nextMatches.map((match) => <MatchCard key={match.id} match={match} teamsById={league.teamsById} playersById={league.playersById} />)}
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Sparkles className="text-gold" /> Próximos partidos</div>
-          <div className="space-y-4">
-            {nextMatches.map((match) => <MatchCard key={match.id} match={match} teamsById={league.teamsById} playersById={league.playersById} />)}
+        </section>
+      ) : (
+        <section className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
+          <div>
+            <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><ShieldCheck className="text-electric" /> Clasificación por división</div>
+            <div className="space-y-5">
+              {league.divisionTables.map((division) => (
+                <section key={division.id}>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-xl font-black">{division.name}</h2>
+                    <Link to={`/tabla?division=${division.slug || division.id}`} className="button-secondary min-h-9 px-3 py-1 text-xs">Ver completa</Link>
+                  </div>
+                  <StandingsTable standings={division.standings.slice(0, 5)} compact championsTeamIds={league.novaChampionsTeamIds} />
+                </section>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+          <div>
+            <div className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Sparkles className="text-gold" /> Próximos partidos</div>
+            <div className="space-y-4">
+              {nextMatches.map((match) => <MatchCard key={match.id} match={match} teamsById={league.teamsById} playersById={league.playersById} />)}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

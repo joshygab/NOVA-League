@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import PageTitle from '../../components/PageTitle'
@@ -23,6 +23,7 @@ const emptySanction = { division_id: '', sanction_target: 'player', player_id: '
 const emptyNews = { title: '', excerpt: '', body: '', cover_url: '', coverFile: null }
 const emptyChampionsMatch = { season_id: new Date().getFullYear().toString(), round: 'quarterfinal', match_order: 1, home_team_id: '', away_team_id: '', home_score: '', away_score: '', home_penalties: '', away_penalties: '', status: 'scheduled', match_date: '', venue: '', mvp_player_id: '', best_goalkeeper_player_id: '' }
 const emptyChampionsStat = { match_id: '', team_id: '', player_id: '', stat_type: 'goal', minute: '', value: 1 }
+const emptyChampionSpotlight = { is_active: false, display_mode: 'home_section', tournament_name: '', season_label: '', champion_team_id: '', champion_photo_url: '', championPhotoFile: null, message_title: '¡Felicidades, campeones!', message_body: 'Han conquistado la gloria de NOVA.' }
 
 export default function AdminDashboard({ league }) {
   const [tab, setTab] = useState('dashboard')
@@ -93,6 +94,7 @@ export default function AdminDashboard({ league }) {
         {tab === 'sanciones' && <SancionesHub league={league} setTab={setTab} run={run} busy={busy} />}
 
         {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
+        {tab === 'modo campeón' && <ChampionSpotlightAdmin busy={busy} run={run} league={league} />}
         {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
         {tab === 'equipos-form' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
         {tab === 'jugadores-form' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
@@ -123,7 +125,7 @@ export default function AdminDashboard({ league }) {
 
 function sectionForTool(tab) {
   if (['partidos-form', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
-  if (['equipos-form', 'liga', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
+  if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
   return 'dashboard'
@@ -139,6 +141,7 @@ function adminTitle(tab) {
     'acta digital': 'Captura de Partido',
     'escáner nova id': 'Escáner NOVA ID',
     'nova champions cup': 'NOVA Champions Cup',
+    'modo campeón': 'Modo Campeón',
     'partidos-form': 'Crear Partido',
     'equipos-form': 'Gestionar Equipos',
     'jugadores-form': 'Gestionar Jugadores',
@@ -171,7 +174,7 @@ function AdminSummary({ league, setTab, run, busy }) {
         <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />
         <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos')} />
         <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />
-        <AdminAction title="Ver sanciones" text="Disciplina activa" onClick={() => setTab('sanciones')} />
+        <AdminAction title="Modo Campeón" text="Presentación del campeón" onClick={() => setTab('modo campeón')} />
       </section>
 
       <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />
@@ -268,6 +271,7 @@ function EquiposHub({ league, setTab, run, busy }) {
         <AdminAction title="Equipos" text="Crear o editar" onClick={() => setTab('equipos-form')} />
         <AdminAction title="Divisiones" text="Orden y ascensos" onClick={() => setTab('divisiones')} />
         <AdminAction title="Liga" text="Logo y portada" onClick={() => setTab('liga')} />
+        <AdminAction title="Modo Campeón" text="Activar presentación" onClick={() => setTab('modo campeón')} />
         <AdminAction title="Tabla" text="Ver clasificación" onClick={() => setTab('tabla')} />
       </div>
       <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />
@@ -324,6 +328,58 @@ function LeagueSettingsForm({ run, busy, settings }) {
     {form.logo_url && <img src={form.logo_url} alt={form.name} className="h-20 w-20 rounded-lg object-cover ring-1 ring-white/10" />}
     <SaveButton busy={busy} onClick={() => run(() => saveLeagueSettings(form), 'Configuración de liga actualizada')} />
   </AdminGrid>
+}
+
+function ChampionSpotlightAdmin({ run, busy, league }) {
+  const [form, setForm] = useState({ ...emptyChampionSpotlight, ...(league.championSpotlight || {}) })
+  const champion = league.teamsById.get(form.champion_team_id)
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[1fr_.75fr]">
+      <div className="panel space-y-4 p-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Inicio público</p>
+          <h2 className="text-2xl font-black">Modo Campeón</h2>
+          <p className="mt-1 text-sm text-slate-400">Cuando esté activo, reemplaza las tablas del inicio por una presentación del campeón. Las tablas siguen disponibles en el menú Tabla.</p>
+        </div>
+        <Select label="Estado" value={String(form.is_active)} onChange={(is_active) => setForm({ ...form, is_active: is_active === 'true' })} options={[{ id: 'false', name: 'Desactivado' }, { id: 'true', name: 'Activado' }]} />
+        <Select label="Ubicación" value={form.display_mode || 'home_section'} onChange={(display_mode) => setForm({ ...form, display_mode })} options={[{ id: 'home_section', name: 'Sección principal del inicio' }, { id: 'entry_presentation', name: 'Presentación especial al ingresar' }]} />
+        <Field label="Nombre del torneo" value={form.tournament_name || ''} onChange={(tournament_name) => setForm({ ...form, tournament_name })} />
+        <Field label="Temporada o edición" value={form.season_label || ''} onChange={(season_label) => setForm({ ...form, season_label })} />
+        <Select label="Equipo campeón" value={form.champion_team_id || ''} onChange={(champion_team_id) => setForm({ ...form, champion_team_id })} options={league.teams} />
+        <Field label="Mensaje principal" value={form.message_title || ''} onChange={(message_title) => setForm({ ...form, message_title })} />
+        <label className="block text-sm font-bold">Mensaje secundario</label>
+        <textarea className="input min-h-28" value={form.message_body || ''} onChange={(event) => setForm({ ...form, message_body: event.target.value })} />
+        <FileField label="Fotografía oficial del campeón" onChange={(championPhotoFile) => setForm({ ...form, championPhotoFile })} />
+        {form.champion_photo_url && <img src={form.champion_photo_url} alt="Campeón" className="h-32 w-full rounded-lg object-cover ring-1 ring-gold/30" />}
+        <SaveButton busy={busy} onClick={() => run(() => saveChampionSpotlight(form), 'Modo Campeón actualizado')} />
+      </div>
+
+      <div className="panel p-5">
+        <h3 className="text-xl font-black">Vista configurada</h3>
+        <div className="mt-4 rounded-lg border border-gold/30 bg-black p-5 text-center">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-gold">CAMPEÓN</p>
+          <p className="mt-2 text-sm text-slate-400">{form.tournament_name || 'Nombre del torneo'}</p>
+          <div className="mx-auto mt-5 grid h-28 w-28 place-items-center rounded-full border border-gold/40 bg-gold/10">
+            {champion?.crest_url ? <img src={champion.crest_url} alt={champion.name} className="h-20 w-20 object-contain" /> : <span className="text-4xl">🏆</span>}
+          </div>
+          <h4 className="mt-4 text-2xl font-black">{champion?.name || 'Selecciona equipo'}</h4>
+          <p className="mt-2 text-gold">{form.message_title || '¡Felicidades, campeones!'}</p>
+          <p className="mt-1 text-sm text-slate-400">{form.season_label || 'Temporada'}</p>
+        </div>
+        <h3 className="mt-6 text-lg font-black">Historial de campeones</h3>
+        <div className="mt-3 space-y-2">
+          {(league.championHistory || []).slice(0, 6).map((item) => (
+            <p key={item.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+              <span className="font-bold">{league.teamsById.get(item.champion_team_id)?.name || 'Equipo'}</span>
+              <span className="text-slate-400"> · {item.tournament_name} · {item.season_label || 'Sin temporada'}</span>
+            </p>
+          ))}
+          {(league.championHistory || []).length === 0 && <p className="text-sm text-slate-400">Aún no hay campeones anteriores guardados.</p>}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function TeamForm({ run, busy, teams, divisions }) {
