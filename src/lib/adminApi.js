@@ -98,6 +98,8 @@ async function upsertTeamWithSchemaFallback(payload) {
 function missingSchemaColumn(error) {
   const message = `${error?.message || ''} ${error?.details || ''}`
   const match = message.match(/Could not find the '([^']+)' column/i)
+    || message.match(/column "([^"]+)" of relation/i)
+    || message.match(/column "([^"]+)" does not exist/i)
   return match?.[1] || null
 }
 
@@ -383,7 +385,7 @@ export async function updateMatchLiveState(matchId, patch, reason = 'live_state_
     ...patch,
     last_live_update_at: new Date().toISOString(),
   }
-  const result = await supabase.from('matches').update(payload).eq('id', matchId).select().single()
+  const result = await updateMatchWithSchemaFallback(matchId, payload)
   return auditResult(result, { action: reason, module: 'referee_mode', entityTable: 'matches', entityId: matchId, previousValue: previous })
 }
 
@@ -429,13 +431,14 @@ export async function saveRefereeMatchEvent({ match, event, liveScore }) {
   if (!event?.event_type) return { error: { message: 'Selecciona una acción.' } }
   const previousMatch = await readRecord('matches', match.id)
   const clientEventId = event.client_event_id || crypto.randomUUID()
+  const storageType = compatibleRefereeEventType(event.event_type)
   const payload = {
     division_id: match.division_id || null,
     match_id: match.id,
     team_id: event.team_id || null,
     player_id: event.player_id || null,
     related_player_id: event.related_player_id || null,
-    type: event.event_type,
+    type: storageType,
     event_type: event.event_type,
     minute: event.minute ? Number(event.minute) : 0,
     detail: event.detail || null,
@@ -448,7 +451,7 @@ export async function saveRefereeMatchEvent({ match, event, liveScore }) {
     metadata: event.metadata || {},
   }
 
-  const eventResult = await supabase.from('match_events').insert(payload).select().single()
+  const eventResult = await insertMatchEventWithSchemaFallback(payload)
   if (eventResult.error) return eventResult
 
   const scorePatch = {
@@ -458,11 +461,70 @@ export async function saveRefereeMatchEvent({ match, event, liveScore }) {
     last_live_update_at: new Date().toISOString(),
     live_version: Number(previousMatch?.live_version || 1) + 1,
   }
-  const matchResult = await supabase.from('matches').update(scorePatch).eq('id', match.id).select().single()
-  if (matchResult.error) return matchResult
+  const matchResult = await updateMatchWithSchemaFallback(match.id, scorePatch)
+  if (matchResult.error) {
+    return {
+      error: {
+        message: `${matchResult.error.message}. El evento se guardó, pero falta ejecutar el SQL de Modo Árbitro para actualizar marcador en vivo.`,
+      },
+    }
+  }
 
   await logAudit({ action: 'create_referee_event', module: 'referee_mode', entityTable: 'match_events', entityId: eventResult.data.id, newValue: { event: eventResult.data, liveScore: scorePatch } })
   return eventResult
+}
+
+async function insertMatchEventWithSchemaFallback(payload) {
+  const mutablePayload = { ...payload }
+  const skipped = []
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const result = await supabase.from('match_events').insert(mutablePayload).select().single()
+    if (!result.error) {
+      if (skipped.length) result.data = { ...result.data, _compatibility_warning: `Faltan columnas en match_events: ${skipped.join(', ')}` }
+      return result
+    }
+    const missingColumn = missingSchemaColumn(result.error)
+    if (!missingColumn || !(missingColumn in mutablePayload)) return normalizeRefereeEventError(result)
+    delete mutablePayload[missingColumn]
+    skipped.push(missingColumn)
+  }
+  return { error: { message: 'No se pudo registrar el evento. Ejecuta supabase/add_referee_mode_phase_b.sql.' } }
+}
+
+async function updateMatchWithSchemaFallback(matchId, payload) {
+  const mutablePayload = { ...payload }
+  const skipped = []
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const result = await supabase.from('matches').update(mutablePayload).eq('id', matchId).select().single()
+    if (!result.error) {
+      if (skipped.length) result.data = { ...result.data, _compatibility_warning: `Faltan columnas live en matches: ${skipped.join(', ')}` }
+      return result
+    }
+    const missingColumn = missingSchemaColumn(result.error)
+    if (!missingColumn || !(missingColumn in mutablePayload)) return normalizeRefereeEventError(result)
+    delete mutablePayload[missingColumn]
+    skipped.push(missingColumn)
+  }
+  return { error: { message: 'No se pudo actualizar el partido. Ejecuta supabase/add_referee_mode_phase_a.sql.' } }
+}
+
+function compatibleRefereeEventType(type) {
+  if (type === 'second_yellow') return 'red_card'
+  if (type === 'staff_card') return 'yellow_card'
+  return type
+}
+
+function normalizeRefereeEventError(result) {
+  const message = result.error?.message || ''
+  if (message.includes('row-level security') || message.includes('violates row-level security')) {
+    return { error: { message: 'No tienes permiso para registrar este evento. Asigna este partido al árbitro o entra como administrador, y ejecuta las políticas del Modo Árbitro.' } }
+  }
+  if (message.includes('match_events_type_check')) {
+    return { error: { message: 'Supabase todavía no acepta este tipo de evento. Ejecuta supabase/add_referee_mode_phase_b.sql.' } }
+  }
+  return result
 }
 
 export async function voidRefereeMatchEvent({ match, event, liveScore, reason }) {
