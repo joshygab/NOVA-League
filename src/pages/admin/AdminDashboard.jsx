@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
+import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
+import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import PageTitle from '../../components/PageTitle'
@@ -72,6 +72,7 @@ export default function AdminDashboard({ league }) {
             ))}
           </nav>
           <div className="absolute bottom-4 left-4 right-4 space-y-2">
+            <button className="button-secondary w-full justify-start" onClick={() => setTab('bitacora')}><Activity size={16} />Bitácora</button>
             <button className="button-secondary w-full justify-start" onClick={league.reload}><RefreshCcw size={16} />Actualizar</button>
             {hasSupabaseConfig && <button className="button-secondary w-full justify-start" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} />Cerrar sesión</button>}
           </div>
@@ -94,6 +95,7 @@ export default function AdminDashboard({ league }) {
         {tab === 'sanciones' && <SancionesHub league={league} setTab={setTab} run={run} busy={busy} />}
 
         {tab === 'liga' && <LeagueSettingsForm busy={busy} run={run} settings={league.settings} />}
+        {tab === 'bitacora' && <AuditLogAdmin />}
         {tab === 'modo campeón' && <ChampionSpotlightAdmin busy={busy} run={run} league={league} />}
         {tab === 'divisiones' && <DivisionAdmin busy={busy} run={run} league={league} />}
         {tab === 'equipos-form' && <TeamForm busy={busy} run={run} teams={league.teams} divisions={league.divisions} />}
@@ -128,6 +130,7 @@ function sectionForTool(tab) {
   if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
+  if (['bitacora'].includes(tab)) return 'dashboard'
   return 'dashboard'
 }
 
@@ -142,6 +145,7 @@ function adminTitle(tab) {
     'escáner nova id': 'Escáner NOVA ID',
     'nova champions cup': 'NOVA Champions Cup',
     'modo campeón': 'Modo Campeón',
+    bitacora: 'Bitácora',
     'partidos-form': 'Crear Partido',
     'equipos-form': 'Gestionar Equipos',
     'jugadores-form': 'Gestionar Jugadores',
@@ -175,9 +179,21 @@ function AdminSummary({ league, setTab, run, busy }) {
         <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos')} />
         <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />
         <AdminAction title="Modo Campeón" text="Presentación del campeón" onClick={() => setTab('modo campeón')} />
+        <AdminAction title="Bitácora" text="Acciones recientes" onClick={() => setTab('bitacora')} />
       </section>
 
       <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />
+
+      <section className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Control interno</p>
+            <h3 className="mt-2 text-2xl font-black">Bitácora de acciones</h3>
+            <p className="mt-1 text-sm text-slate-400">Consulta quién cambió resultados, jugadores, sanciones, equipos y actas.</p>
+          </div>
+          <button className="button" onClick={() => setTab('bitacora')}><Activity size={16} />Abrir bitácora</button>
+        </div>
+      </section>
 
       <section className="panel p-5">
         <div className="mb-4 flex items-center gap-2">
@@ -328,6 +344,133 @@ function LeagueSettingsForm({ run, busy, settings }) {
     {form.logo_url && <img src={form.logo_url} alt={form.name} className="h-20 w-20 rounded-lg object-cover ring-1 ring-white/10" />}
     <SaveButton busy={busy} onClick={() => run(() => saveLeagueSettings(form), 'Configuración de liga actualizada')} />
   </AdminGrid>
+}
+
+function AuditLogAdmin() {
+  const [rows, setRows] = useState([])
+  const [module, setModule] = useState('')
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      if (!hasSupabaseConfig) {
+        setError('Modo demo: conecta Supabase para consultar la bitácora real.')
+        setRows([])
+        return
+      }
+      setLoading(true)
+      setError('')
+      const result = await fetchAuditLogs({ module, search, limit: 120 })
+      if (!active) return
+      setLoading(false)
+      if (result.error) {
+        setRows([])
+        setError(result.error.message?.includes('audit_logs') ? 'Ejecuta primero la migración supabase/add_platform_foundation.sql para crear la tabla audit_logs.' : result.error.message)
+        return
+      }
+      setRows(result.data || [])
+    }
+    load()
+    return () => { active = false }
+  }, [module, search])
+
+  const modules = ['teams', 'players', 'matches', 'match_sheet', 'discipline', 'playoffs', 'nova_champions', 'nova_champions_stats', 'nova_id', 'champion_spotlight', 'media', 'settings', 'divisions']
+
+  return (
+    <section className="space-y-5">
+      <div className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Control interno</p>
+            <h2 className="mt-2 text-2xl font-black">Bitácora de acciones</h2>
+            <p className="mt-1 text-sm text-slate-400">Consulta cambios administrativos sin exponerlos en la app pública.</p>
+          </div>
+          <button className="button-secondary" onClick={() => { setModule(''); setSearch('') }}><RefreshCcw size={16} />Limpiar filtros</button>
+        </div>
+      </div>
+
+      <div className="panel grid gap-3 p-4 md:grid-cols-[1fr_240px]">
+        <label className="relative block">
+          <Search className="absolute left-3 top-3 text-slate-500" size={18} />
+          <input className="input pl-10" placeholder="Buscar por usuario, acción, módulo o entidad" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <select className="input" value={module} onChange={(event) => setModule(event.target.value)}>
+          <option value="">Todos los módulos</option>
+          {modules.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </div>
+
+      {error && <p className="rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{error}</p>}
+      {loading && <div className="panel p-5 text-sm text-slate-400">Cargando bitácora...</div>}
+      {!loading && !error && rows.length === 0 && <div className="panel p-5 text-sm text-slate-400">Aún no hay acciones registradas.</div>}
+
+      <div className="space-y-3">
+        {rows.map((row) => <AuditLogCard key={row.id} row={row} />)}
+      </div>
+    </section>
+  )
+}
+
+function AuditLogCard({ row }) {
+  return (
+    <article className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-gold/30 bg-gold/10 text-gold"><Activity size={18} /></div>
+          <div>
+            <p className="font-black">{actionLabel(row.action)} <span className="text-gold">{row.module}</span></p>
+            <p className="mt-1 text-sm text-slate-400">{row.actor_email || 'Usuario sin correo'} · {row.entity_table || 'sin tabla'} {row.entity_id ? `· ${row.entity_id}` : ''}</p>
+            {row.reason && <p className="mt-2 rounded-lg bg-black/30 px-3 py-2 text-sm text-slate-300">Motivo: {row.reason}</p>}
+          </div>
+        </div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{formatDateTime(row.created_at)}</p>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <AuditValue title="Antes" value={row.previous_value} />
+        <AuditValue title="Después" value={row.new_value} />
+      </div>
+    </article>
+  )
+}
+
+function AuditValue({ title, value }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+      <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-gold">{title}</p>
+      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">{value ? JSON.stringify(value, null, 2) : 'Sin datos'}</pre>
+    </div>
+  )
+}
+
+function actionLabel(action) {
+  const labels = {
+    create: 'Creó',
+    update: 'Actualizó',
+    delete: 'Eliminó',
+    approve: 'Aprobó',
+    reject: 'Rechazó',
+    assign_team: 'Asignó equipo',
+    finalize_match: 'Finalizó partido',
+    save_report: 'Guardó acta',
+    finalize_report: 'Finalizó acta',
+    create_event: 'Registró evento',
+    delete_event: 'Eliminó evento',
+    generate_bracket: 'Generó bracket',
+    generate_semifinals: 'Generó semifinales',
+    qualify_team: 'Clasificó equipo',
+    unqualify_team: 'Quitó clasificación',
+    confirm_attendance: 'Confirmó asistencia',
+    set_mvp: 'Asignó MVP',
+  }
+  return labels[action] || action || 'Acción'
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Sin fecha'
+  return new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 function ChampionSpotlightAdmin({ run, busy, league }) {

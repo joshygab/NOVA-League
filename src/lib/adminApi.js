@@ -2,7 +2,51 @@ import { supabase } from './supabase'
 import { uploadPublicFile } from './data'
 import { formatNovaId } from './novaId'
 
+async function currentActor() {
+  const { data } = await supabase.auth.getUser()
+  return {
+    user_id: data.user?.id || null,
+    actor_email: data.user?.email || null,
+  }
+}
+
+async function readRecord(table, id) {
+  if (!id) return null
+  const result = await supabase.from(table).select('*').eq('id', id).maybeSingle()
+  return result.error ? null : result.data
+}
+
+async function logAudit({ action, module, entityTable, entityId, previousValue = null, newValue = null, reason = null }) {
+  try {
+    const actor = await currentActor()
+    await supabase.from('audit_logs').insert({
+      ...actor,
+      action,
+      module,
+      entity_table: entityTable,
+      entity_id: entityId ? String(entityId) : null,
+      previous_value: previousValue,
+      new_value: newValue,
+      reason,
+    })
+  } catch {
+    // La bitacora no debe bloquear la operacion principal si la migracion aun no existe.
+  }
+}
+
+async function auditResult(result, audit) {
+  if (!result.error) {
+    await logAudit({
+      ...audit,
+      entityId: audit.entityId || result.data?.id,
+      newValue: audit.newValue ?? result.data ?? null,
+    })
+  }
+  return result
+}
+
 export async function saveTeam(form) {
+  const previous = await readRecord('teams', form.id)
   const payload = {
     name: form.name,
     division_id: form.division_id || null,
@@ -16,11 +60,13 @@ export async function saveTeam(form) {
   if (form.crestFile) {
     payload.crest_url = await uploadPublicFile('team-crests', `${crypto.randomUUID()}-${form.crestFile.name}`, form.crestFile)
   }
-  return supabase.from('teams').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  const result = await supabase.from('teams').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'teams', entityTable: 'teams', previousValue: previous })
 }
 
 export async function saveDivision(form) {
-  return supabase
+  const previous = await readRecord('divisions', form.id)
+  const result = await supabase
     .from('divisions')
     .upsert({
       id: form.id || undefined,
@@ -36,6 +82,7 @@ export async function saveDivision(form) {
     })
     .select()
     .single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'divisions', entityTable: 'divisions', previousValue: previous })
 }
 
 export async function closeSeason({ season, divisionTables }) {
@@ -103,6 +150,7 @@ export async function closeSeason({ season, divisionTables }) {
 }
 
 export async function saveLeagueSettings(form) {
+  const previous = await readRecord('league_settings', 1)
   const payload = {
     id: 1,
     name: form.name,
@@ -114,7 +162,8 @@ export async function saveLeagueSettings(form) {
   if (form.logoFile) {
     payload.logo_url = await uploadPublicFile('league-assets', `${crypto.randomUUID()}-${form.logoFile.name}`, form.logoFile)
   }
-  return supabase.from('league_settings').upsert(payload).select().single()
+  const result = await supabase.from('league_settings').upsert(payload).select().single()
+  return auditResult(result, { action: 'update', module: 'settings', entityTable: 'league_settings', entityId: 1, previousValue: previous })
 }
 
 export async function saveChampionSpotlight(form) {
@@ -154,11 +203,13 @@ export async function saveChampionSpotlight(form) {
   if (form.championPhotoFile) {
     payload.champion_photo_url = await uploadPublicFile('league-assets', `champions/${crypto.randomUUID()}-${form.championPhotoFile.name}`, form.championPhotoFile)
   }
-  return supabase.from('champion_spotlight').upsert(payload).select().single()
+  const result = await supabase.from('champion_spotlight').upsert(payload).select().single()
+  return auditResult(result, { action: 'update', module: 'champion_spotlight', entityTable: 'champion_spotlight', entityId: 1, previousValue: previous })
 }
 
 export async function savePlayer(form) {
   if (!form.team_id) return { error: { message: 'Selecciona un equipo para el jugador.' } }
+  const previous = await readRecord('players', form.id)
   const payload = {
     team_id: form.team_id,
     nova_id: form.nova_id || formatNovaId(Date.now()),
@@ -177,25 +228,33 @@ export async function savePlayer(form) {
   if (form.photoFile) {
     payload.photo_url = await uploadPublicFile('player-photos', `${crypto.randomUUID()}-${form.photoFile.name}`, form.photoFile)
   }
-  return supabase.from('players').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  const result = await supabase.from('players').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'players', entityTable: 'players', previousValue: previous })
 }
 
 export async function approvePlayer(playerId, teamId) {
   if (!teamId) return { error: { message: 'Selecciona un equipo antes de aprobar al jugador.' } }
-  return supabase.from('players').update({ approval_status: 'approved', team_id: teamId }).eq('id', playerId)
+  const previous = await readRecord('players', playerId)
+  const result = await supabase.from('players').update({ approval_status: 'approved', team_id: teamId }).eq('id', playerId).select().single()
+  return auditResult(result, { action: 'approve', module: 'players', entityTable: 'players', entityId: playerId, previousValue: previous, reason: 'Aprobacion de registro' })
 }
 
 export async function rejectPlayer(playerId) {
-  return supabase.from('players').update({ approval_status: 'rejected' }).eq('id', playerId)
+  const previous = await readRecord('players', playerId)
+  const result = await supabase.from('players').update({ approval_status: 'rejected' }).eq('id', playerId).select().single()
+  return auditResult(result, { action: 'reject', module: 'players', entityTable: 'players', entityId: playerId, previousValue: previous, reason: 'Rechazo de registro' })
 }
 
 export async function assignPlayerToTeam(playerId, teamId) {
   if (!teamId) return { error: { message: 'Selecciona un equipo para asignar al jugador.' } }
-  return supabase.from('players').update({ team_id: teamId }).eq('id', playerId)
+  const previous = await readRecord('players', playerId)
+  const result = await supabase.from('players').update({ team_id: teamId }).eq('id', playerId).select().single()
+  return auditResult(result, { action: 'assign_team', module: 'players', entityTable: 'players', entityId: playerId, previousValue: previous })
 }
 
 export async function saveMatch(form) {
-  return supabase
+  const previous = await readRecord('matches', form.id)
+  const result = await supabase
     .from('matches')
     .upsert({
       id: form.id || undefined,
@@ -213,10 +272,12 @@ export async function saveMatch(form) {
     })
     .select()
     .single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'matches', entityTable: 'matches', previousValue: previous })
 }
 
 export async function saveEvent(form) {
-  return supabase
+  const previous = await readRecord('match_events', form.id)
+  const result = await supabase
     .from('match_events')
     .upsert({
       id: form.id || undefined,
@@ -229,10 +290,12 @@ export async function saveEvent(form) {
     })
     .select()
     .single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'match_events', entityTable: 'match_events', previousValue: previous })
 }
 
 export async function saveGoal(form) {
-  return supabase
+  const previous = await readRecord('goals', form.id)
+  const result = await supabase
     .from('goals')
     .upsert({
       id: form.id || undefined,
@@ -246,10 +309,12 @@ export async function saveGoal(form) {
     })
     .select()
     .single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'goals', entityTable: 'goals', previousValue: previous })
 }
 
 export async function saveCard(form) {
-  return supabase
+  const previous = await readRecord('match_cards', form.id)
+  const result = await supabase
     .from('match_cards')
     .upsert({
       id: form.id || undefined,
@@ -263,10 +328,14 @@ export async function saveCard(form) {
     })
     .select()
     .single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'discipline', entityTable: 'match_cards', previousValue: previous })
 }
 
 export async function deleteRecord(table, id) {
-  return supabase.from(table).delete().eq('id', id)
+  const previous = await readRecord(table, id)
+  const result = await supabase.from(table).delete().eq('id', id)
+  if (!result.error) await logAudit({ action: 'delete', module: table, entityTable: table, entityId: id, previousValue: previous })
+  return result
 }
 
 function playoffWinner(payload) {
@@ -287,13 +356,16 @@ export async function generateSemifinals(standings, divisionId) {
 
   if (divisionId) await supabase.from('playoff_matches').delete().eq('division_id', divisionId)
   else await supabase.from('playoff_matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-  return supabase.from('playoff_matches').upsert([
+  const result = await supabase.from('playoff_matches').upsert([
     { division_id: divisionId || null, stage: 'semifinal', slot: 1, home_team_id: top[0].id, away_team_id: top[3].id, home_seed: 1, away_seed: 4, status: 'pending' },
     { division_id: divisionId || null, stage: 'semifinal', slot: 2, home_team_id: top[1].id, away_team_id: top[2].id, home_seed: 2, away_seed: 3, status: 'pending' },
   ], { onConflict: 'division_id,stage,slot' })
+  if (!result.error) await logAudit({ action: 'generate_semifinals', module: 'playoffs', entityTable: 'playoff_matches', entityId: divisionId, newValue: { divisionId, teams: top.map((team) => team.id) } })
+  return result
 }
 
 export async function savePlayoffMatch(form, allPlayoffs = [], includeThirdPlace = false) {
+  const previous = await readRecord('playoff_matches', form.id)
   const winner = playoffWinner(form)
   const payload = {
     id: form.id || undefined,
@@ -316,6 +388,7 @@ export async function savePlayoffMatch(form, allPlayoffs = [], includeThirdPlace
   }
   const result = await supabase.from('playoff_matches').upsert(payload, { onConflict: 'division_id,stage,slot' }).select().single()
   if (result.error) return result
+  await logAudit({ action: form.id ? 'update' : 'create', module: 'playoffs', entityTable: 'playoff_matches', entityId: result.data.id, previousValue: previous, newValue: result.data })
 
   const next = allPlayoffs.map((match) => (match.id === result.data.id ? result.data : match))
   const semis = next.filter((match) => match.stage === 'semifinal')
@@ -349,7 +422,8 @@ export async function savePlayoffMatch(form, allPlayoffs = [], includeThirdPlace
 }
 
 export async function saveSanction(form) {
-  return supabase
+  const previous = await readRecord('sanctions', form.id)
+  const result = await supabase
     .from('sanctions')
     .upsert({
       id: form.id || undefined,
@@ -365,9 +439,11 @@ export async function saveSanction(form) {
     })
     .select()
     .single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'discipline', entityTable: 'sanctions', previousValue: previous, reason: form.reason || null })
 }
 
 export async function saveNews(form) {
+  const previous = await readRecord('news', form.id)
   const payload = {
     title: form.title,
     excerpt: form.excerpt,
@@ -378,31 +454,39 @@ export async function saveNews(form) {
   if (form.coverFile) {
     payload.cover_url = await uploadPublicFile('news-covers', `${crypto.randomUUID()}-${form.coverFile.name}`, form.coverFile)
   }
-  return supabase.from('news').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  const result = await supabase.from('news').upsert(form.id ? { ...payload, id: form.id } : payload).select().single()
+  return auditResult(result, { action: form.id ? 'update' : 'create', module: 'media', entityTable: 'news', previousValue: previous })
 }
 
 export async function saveNovaChampionsSettings(form) {
-  return supabase.from('nova_champions_settings').upsert({
+  const previous = await readRecord('nova_champions_settings', 1)
+  const result = await supabase.from('nova_champions_settings').upsert({
     id: 1,
     is_active: form.is_active,
     status: form.is_active ? 'active' : 'coming_soon',
     season_id: form.season_id || new Date().getFullYear().toString(),
     format: Number(form.format || 8),
   }).select().single()
+  return auditResult(result, { action: 'update', module: 'nova_champions', entityTable: 'nova_champions_settings', entityId: 1, previousValue: previous })
 }
 
 export async function setNovaChampionsTeam(teamId, selected, seasonId = new Date().getFullYear().toString()) {
   if (selected) {
-    return supabase.from('nova_champions_qualified_teams').upsert({
+    const result = await supabase.from('nova_champions_qualified_teams').upsert({
       team_id: teamId,
       season_id: seasonId,
       qualification_method: 'manual',
     }, { onConflict: 'team_id,season_id' })
+    if (!result.error) await logAudit({ action: 'qualify_team', module: 'nova_champions', entityTable: 'nova_champions_qualified_teams', entityId: teamId, newValue: { team_id: teamId, season_id: seasonId } })
+    return result
   }
-  return supabase.from('nova_champions_qualified_teams').delete().eq('team_id', teamId).eq('season_id', seasonId)
+  const result = await supabase.from('nova_champions_qualified_teams').delete().eq('team_id', teamId).eq('season_id', seasonId)
+  if (!result.error) await logAudit({ action: 'unqualify_team', module: 'nova_champions', entityTable: 'nova_champions_qualified_teams', entityId: teamId, previousValue: { team_id: teamId, season_id: seasonId } })
+  return result
 }
 
 export async function saveNovaChampionsMatch(form) {
+  const previous = await readRecord('nova_champions_matches', form.id)
   const home = form.home_score === '' || form.home_score == null ? null : Number(form.home_score)
   const away = form.away_score === '' || form.away_score == null ? null : Number(form.away_score)
   const homePen = form.home_penalties === '' || form.home_penalties == null ? null : Number(form.home_penalties)
@@ -433,6 +517,7 @@ export async function saveNovaChampionsMatch(form) {
     best_goalkeeper_player_id: form.best_goalkeeper_player_id || null,
   }).select().single()
   if (result.error) return result
+  await logAudit({ action: form.id ? 'update' : 'create', module: 'nova_champions', entityTable: 'nova_champions_matches', entityId: result.data.id, previousValue: previous, newValue: result.data })
 
   if (winner) {
     const advance = await advanceNovaChampionsWinner(result.data)
@@ -505,30 +590,36 @@ export async function generateNovaChampionsBracket({ teams, seasonId, format = 8
 
   const clear = await supabase.from('nova_champions_matches').delete().eq('season_id', seasonId)
   if (clear.error) return clear
-  return supabase.from('nova_champions_matches').insert(matches)
+  const result = await supabase.from('nova_champions_matches').insert(matches)
+  if (!result.error) await logAudit({ action: 'generate_bracket', module: 'nova_champions', entityTable: 'nova_champions_matches', entityId: seasonId, newValue: { seasonId, format: size, mode, matches } })
+  return result
 }
 
 export async function saveNovaChampionsStat(form) {
-  return supabase.from('nova_champions_stats').insert({
+  const result = await supabase.from('nova_champions_stats').insert({
     match_id: form.match_id,
     player_id: form.player_id,
     team_id: form.team_id,
     stat_type: form.stat_type,
     minute: form.minute ? Number(form.minute) : null,
     value: Number(form.value || 1),
-  })
+  }).select().single()
+  return auditResult(result, { action: 'create', module: 'nova_champions_stats', entityTable: 'nova_champions_stats' })
 }
 
 export async function savePlayoffSetting({ division_id, is_active }) {
   if (!division_id) return { error: { message: 'Selecciona una división.' } }
-  return supabase.from('playoff_settings').upsert({
+  const previous = await supabase.from('playoff_settings').select('*').eq('division_id', division_id).maybeSingle()
+  const result = await supabase.from('playoff_settings').upsert({
     division_id,
     is_active,
     status: is_active ? 'active' : 'coming_soon',
   }, { onConflict: 'division_id' }).select().single()
+  return auditResult(result, { action: 'update', module: 'playoffs', entityTable: 'playoff_settings', previousValue: previous.data || null })
 }
 
 export async function saveMatchLineups({ match, presentPlayers, captains }) {
+  const previous = await supabase.from('match_lineups').select('*').eq('match_id', match.id)
   const rows = presentPlayers.map((player) => ({
     match_id: match.id,
     team_id: player.team_id,
@@ -539,11 +630,14 @@ export async function saveMatchLineups({ match, presentPlayers, captains }) {
   }))
   await supabase.from('match_lineups').delete().eq('match_id', match.id)
   if (!rows.length) return { error: { message: 'Selecciona jugadores presentes.' } }
-  return supabase.from('match_lineups').insert(rows)
+  const result = await supabase.from('match_lineups').insert(rows)
+  if (!result.error) await logAudit({ action: 'save_lineups', module: 'match_sheet', entityTable: 'match_lineups', entityId: match.id, previousValue: previous.data || [], newValue: rows })
+  return result
 }
 
 export async function saveMatchReport(form) {
-  return supabase.from('match_reports').upsert({
+  const previous = await supabase.from('match_reports').select('*').eq('match_id', form.match_id).maybeSingle()
+  const result = await supabase.from('match_reports').upsert({
     id: form.id || undefined,
     match_id: form.match_id,
     referee_name: form.referee_name || null,
@@ -555,6 +649,7 @@ export async function saveMatchReport(form) {
     pdf_url: form.pdf_url || null,
     status: form.status || 'draft',
   }, { onConflict: 'match_id' }).select().single()
+  return auditResult(result, { action: form.status === 'finalized' ? 'finalize_report' : 'save_report', module: 'match_sheet', entityTable: 'match_reports', previousValue: previous.data || null })
 }
 
 export async function saveDigitalMatchEvent(form) {
@@ -612,11 +707,13 @@ export async function saveDigitalMatchEvent(form) {
   }
 
   if (form.event_type === 'mvp') {
+    const previousMatch = await readRecord('matches', form.match_id)
     const matchResult = await supabase.from('matches').update({ mvp_player_id: form.player_id }).eq('id', form.match_id)
     if (matchResult.error) return matchResult
+    await logAudit({ action: 'set_mvp', module: 'match_sheet', entityTable: 'matches', entityId: form.match_id, previousValue: previousMatch, newValue: { mvp_player_id: form.player_id } })
   }
 
-  return eventResult
+  return auditResult(eventResult, { action: 'create_event', module: 'match_sheet', entityTable: 'match_events', entityId: eventResult.data.id, newValue: eventResult.data })
 }
 
 export async function deleteDigitalMatchEvent(event) {
@@ -644,10 +741,13 @@ export async function deleteDigitalMatchEvent(event) {
     if (cardDelete.error) return cardDelete
   }
 
-  return supabase.from('match_events').delete().eq('id', event.id)
+  const result = await supabase.from('match_events').delete().eq('id', event.id)
+  if (!result.error) await logAudit({ action: 'delete_event', module: 'match_sheet', entityTable: 'match_events', entityId: event.id, previousValue: event })
+  return result
 }
 
 export async function finalizeDigitalMatch({ match, report, score }) {
+  const previous = await readRecord('matches', match.id)
   const matchResult = await supabase.from('matches').update({
     home_score: Number(score.home),
     away_score: Number(score.away),
@@ -656,6 +756,7 @@ export async function finalizeDigitalMatch({ match, report, score }) {
     observations: report.observations || match.observations || null,
   }).eq('id', match.id)
   if (matchResult.error) return matchResult
+  await logAudit({ action: 'finalize_match', module: 'match_sheet', entityTable: 'matches', entityId: match.id, previousValue: previous, newValue: { ...match, home_score: Number(score.home), away_score: Number(score.away), status: 'played' } })
 
   return saveMatchReport({
     ...report,
@@ -678,7 +779,7 @@ export async function confirmNovaIdAttendance({ match, player }) {
   }, { onConflict: 'match_id,player_id' })
   if (roster.error) return roster
 
-  return supabase.from('match_lineups').upsert({
+  const lineup = await supabase.from('match_lineups').upsert({
     match_id: match.id,
     team_id: player.team_id,
     player_id: player.id,
@@ -686,4 +787,33 @@ export async function confirmNovaIdAttendance({ match, player }) {
     is_present: true,
     captain: false,
   }, { onConflict: 'match_id,player_id' })
+  if (!lineup.error) await logAudit({ action: 'confirm_attendance', module: 'nova_id', entityTable: 'match_roster', entityId: `${match.id}:${player.id}`, newValue: { match_id: match.id, player_id: player.id, team_id: player.team_id } })
+  return lineup
+}
+
+export async function fetchAuditLogs({ module = '', search = '', limit = 100 } = {}) {
+  let query = supabase
+    .from('audit_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (module) query = query.eq('module', module)
+  const result = await query
+  if (result.error) return result
+
+  const normalized = search.trim().toLowerCase()
+  if (!normalized) return result
+
+  return {
+    ...result,
+    data: result.data.filter((row) => [
+      row.actor_email,
+      row.action,
+      row.module,
+      row.entity_table,
+      row.entity_id,
+      row.reason,
+    ].filter(Boolean).join(' ').toLowerCase().includes(normalized)),
+  }
 }
