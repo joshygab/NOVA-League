@@ -1,5 +1,6 @@
 import Badge from './Badge'
 import PlayerAvatar from './PlayerAvatar'
+import { isCountedMatch } from '../lib/standings'
 
 export function ScorersTable({ rows, teamsById }) {
   return (
@@ -25,7 +26,7 @@ export function MvpRankingTable({ rows, teamsById }) {
 }
 
 export function MvpAwardsTable({ matches, playersById, teamsById }) {
-  const rows = matches.filter((match) => match.status === 'played' && match.mvp_player_id)
+  const rows = matches.filter((match) => isCountedMatch(match) && match.mvp_player_id)
   return (
     <ResponsiveTable title="MVP por partido">
       <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-slate-400">

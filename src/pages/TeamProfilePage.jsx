@@ -140,7 +140,7 @@ function TeamMatch({ match, teamId, league }) {
         </div>
         <div className="text-right">
           <p className="text-xl font-black text-white">{teamScore ?? '-'} - {rivalScore ?? '-'}</p>
-          <Badge tone={match.status === 'played' ? 'gold' : 'slate'}>{match.status}</Badge>
+          <Badge tone={['played', 'official'].includes(match.status) ? 'gold' : 'slate'}>{match.status === 'official' ? 'oficial' : match.status}</Badge>
         </div>
       </div>
     </div>

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
-import { approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
+import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveGoal, saveLeagueSettings, saveMatch, saveNews, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveSanction, saveTeam, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import { hasPermission, permissions } from '../../lib/permissions'
 import PageTitle from '../../components/PageTitle'
 import PlayoffBracket from '../../components/PlayoffBracket'
 import StandingsTable from '../../components/StandingsTable'
@@ -29,15 +30,16 @@ export default function AdminDashboard({ league }) {
   const [tab, setTab] = useState('dashboard')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  const { signOut } = useAuth()
+  const { role, signOut } = useAuth()
   const navigate = useNavigate()
+  const can = (permission) => !hasSupabaseConfig || hasPermission(role, permission)
   const navItems = [
     { id: 'dashboard', label: 'Inicio', icon: Home },
-    { id: 'partidos', label: 'Partidos', icon: CalendarDays },
-    { id: 'equipos', label: 'Equipos', icon: Users },
-    { id: 'jugadores', label: 'Jugadores', icon: UserRound },
-    { id: 'sanciones', label: 'Sanciones', icon: ShieldAlert },
-  ]
+    can(permissions.MATCH_CAPTURE) && { id: 'partidos', label: 'Partidos', icon: CalendarDays },
+    can(permissions.TEAMS_MANAGE) && { id: 'equipos', label: 'Equipos', icon: Users },
+    can(permissions.PLAYERS_MANAGE) && { id: 'jugadores', label: 'Jugadores', icon: UserRound },
+    can(permissions.DISCIPLINE_MANAGE) && { id: 'sanciones', label: 'Sanciones', icon: ShieldAlert },
+  ].filter(Boolean)
   const activeNav = navItems.some((item) => item.id === tab) ? tab : sectionForTool(tab)
 
   async function run(action, done = 'Guardado correctamente') {
@@ -72,7 +74,7 @@ export default function AdminDashboard({ league }) {
             ))}
           </nav>
           <div className="absolute bottom-4 left-4 right-4 space-y-2">
-            <button className="button-secondary w-full justify-start" onClick={() => setTab('bitacora')}><Activity size={16} />Bitácora</button>
+            {can(permissions.AUDIT_READ) && <button className="button-secondary w-full justify-start" onClick={() => setTab('bitacora')}><Activity size={16} />Bitácora</button>}
             <button className="button-secondary w-full justify-start" onClick={league.reload}><RefreshCcw size={16} />Actualizar</button>
             {hasSupabaseConfig && <button className="button-secondary w-full justify-start" onClick={async () => { await signOut(); navigate('/login') }}><LogOut size={16} />Cerrar sesión</button>}
           </div>
@@ -88,7 +90,7 @@ export default function AdminDashboard({ league }) {
 
           {message && <p className="mb-4 rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">{message}</p>}
 
-          {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} run={run} busy={busy} />}
+          {tab === 'dashboard' && <AdminSummary league={league} setTab={setTab} run={run} busy={busy} can={can} />}
         {tab === 'partidos' && <PartidosHub league={league} setTab={setTab} />}
         {tab === 'equipos' && <EquiposHub league={league} setTab={setTab} run={run} busy={busy} />}
         {tab === 'jugadores' && <JugadoresHub league={league} setTab={setTab} run={run} busy={busy} />}
@@ -102,6 +104,7 @@ export default function AdminDashboard({ league }) {
         {tab === 'jugadores-form' && <PlayerForm busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'aprobaciones' && <PlayerApprovals busy={busy} run={run} teams={league.teams} players={league.players} />}
         {tab === 'partidos-form' && <MatchForm busy={busy} run={run} league={league} />}
+        {tab === 'revisión de actas' && <MatchReviewAdmin busy={busy} run={run} league={league} />}
         {tab === 'acta digital' && <MatchSheetAdmin busy={busy} run={run} league={league} />}
         {tab === 'escáner nova id' && <NovaIdScannerAdmin busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
@@ -126,7 +129,7 @@ export default function AdminDashboard({ league }) {
 }
 
 function sectionForTool(tab) {
-  if (['partidos-form', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
+  if (['partidos-form', 'revisión de actas', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
   if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
@@ -142,6 +145,7 @@ function adminTitle(tab) {
     jugadores: 'Jugadores',
     sanciones: 'Sanciones',
     'acta digital': 'Captura de Partido',
+    'revisión de actas': 'Revisión de Actas',
     'escáner nova id': 'Escáner NOVA ID',
     'nova champions cup': 'NOVA Champions Cup',
     'modo campeón': 'Modo Campeón',
@@ -154,15 +158,15 @@ function adminTitle(tab) {
   return titles[tab] || tab
 }
 
-function AdminSummary({ league, setTab, run, busy }) {
+function AdminSummary({ league, setTab, run, busy, can }) {
   const pending = league.players.filter((player) => player.approval_status === 'pending').length
   const inReview = league.matches.filter((match) => match.status === 'played').length
   const sanctions = league.sanctions.filter((sanction) => sanction.status === 'active').length
   const today = new Date().toISOString().slice(0, 10)
   const todayMatches = league.matches.filter((match) => match.match_date?.slice(0, 10) === today)
-  const pendingToday = todayMatches.filter((match) => match.status !== 'played').length
+  const pendingToday = todayMatches.filter((match) => !['played', 'official'].includes(match.status)).length
   const upcomingMatches = league.matches
-    .filter((match) => match.status !== 'played' && match.match_date?.slice(0, 10) >= today)
+    .filter((match) => !['played', 'official'].includes(match.status) && match.match_date?.slice(0, 10) >= today)
     .sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
   const nextMatch = upcomingMatches[0]
   const incompleteMatches = league.matches.filter((match) => !match.match_date || !match.venue).length
@@ -189,12 +193,12 @@ function AdminSummary({ league, setTab, run, busy }) {
             <h3 className="mt-1 text-2xl font-black">Qué necesita revisión</h3>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <AdminAttentionCard title="Jugadores por aprobar" value={pending} text="Revisa registros nuevos" tone={pending ? 'gold' : 'ok'} onClick={() => setTab('aprobaciones')} />
-            <AdminAttentionCard title="Sanciones activas" value={sanctions} text="Disciplina pendiente" tone={sanctions ? 'danger' : 'ok'} onClick={() => setTab('sanciones')} />
-            <AdminAttentionCard title="Actas sin cerrar" value={draftReports} text="Borradores guardados" tone={draftReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />
-            <AdminAttentionCard title="Actas sin firma" value={unsignedReports} text="Faltan firmas digitales" tone={unsignedReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />
-            <AdminAttentionCard title="Partidos incompletos" value={incompleteMatches} text="Sin cancha o fecha" tone={incompleteMatches ? 'gold' : 'ok'} onClick={() => setTab('partidos-form')} />
-            <AdminAttentionCard title="Choques de calendario" value={calendarConflicts} text="Misma cancha y hora" tone={calendarConflicts ? 'danger' : 'ok'} onClick={() => setTab('partidos')} />
+            {can(permissions.PLAYERS_MANAGE) && <AdminAttentionCard title="Jugadores por aprobar" value={pending} text="Revisa registros nuevos" tone={pending ? 'gold' : 'ok'} onClick={() => setTab('aprobaciones')} />}
+            {can(permissions.DISCIPLINE_MANAGE) && <AdminAttentionCard title="Sanciones activas" value={sanctions} text="Disciplina pendiente" tone={sanctions ? 'danger' : 'ok'} onClick={() => setTab('sanciones')} />}
+            {can(permissions.MATCH_CAPTURE) && <AdminAttentionCard title="Actas sin cerrar" value={draftReports} text="Borradores guardados" tone={draftReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />}
+            {can(permissions.MATCH_CAPTURE) && <AdminAttentionCard title="Actas sin firma" value={unsignedReports} text="Faltan firmas digitales" tone={unsignedReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />}
+            {can(permissions.MATCH_REVIEW) && <AdminAttentionCard title="Partidos incompletos" value={incompleteMatches} text="Sin cancha o fecha" tone={incompleteMatches ? 'gold' : 'ok'} onClick={() => setTab('partidos-form')} />}
+            {can(permissions.MATCH_REVIEW) && <AdminAttentionCard title="Choques de calendario" value={calendarConflicts} text="Misma cancha y hora" tone={calendarConflicts ? 'danger' : 'ok'} onClick={() => setTab('partidos')} />}
           </div>
         </div>
 
@@ -202,7 +206,7 @@ function AdminSummary({ league, setTab, run, busy }) {
           <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Próximo partido</p>
           {nextMatch ? (
             <div className="mt-4 space-y-4">
-              <AdminMatchCard match={nextMatch} league={league} onStart={() => setTab('acta digital')} />
+              <AdminMatchCard match={nextMatch} league={league} onStart={can(permissions.MATCH_CAPTURE) ? () => setTab('acta digital') : null} />
               <p className="text-sm text-slate-400">Abre el acta digital cuando el árbitro esté listo para confirmar jugadores.</p>
             </div>
           ) : (
@@ -212,16 +216,17 @@ function AdminSummary({ league, setTab, run, busy }) {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />
-        <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos-form')} />
-        <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />
-        <AdminAction title="Modo Campeón" text="Presentación del campeón" onClick={() => setTab('modo campeón')} />
-        <AdminAction title="Bitácora" text="Acciones recientes" onClick={() => setTab('bitacora')} />
+        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Iniciar partido" text="Abrir acta digital" onClick={() => setTab('acta digital')} />}
+        {can(permissions.MATCH_REVIEW) && <AdminAction title="Revisar actas" text="Publicar resultado oficial" onClick={() => setTab('revisión de actas')} />}
+        {can(permissions.MATCH_REVIEW) && <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos-form')} />}
+        {can(permissions.PLAYERS_MANAGE) && <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />}
+        {can(permissions.SETTINGS_MANAGE) && <AdminAction title="Modo Campeón" text="Presentación del campeón" onClick={() => setTab('modo campeón')} />}
+        {can(permissions.AUDIT_READ) && <AdminAction title="Bitácora" text="Acciones recientes" onClick={() => setTab('bitacora')} />}
       </section>
 
-      <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />
+      {can(permissions.SETTINGS_MANAGE) && <ChampionsAdminStatus league={league} setTab={setTab} run={run} busy={busy} />}
 
-      <section className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+      {can(permissions.AUDIT_READ) && <section className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Control interno</p>
@@ -230,7 +235,7 @@ function AdminSummary({ league, setTab, run, busy }) {
           </div>
           <button className="button" onClick={() => setTab('bitacora')}><Activity size={16} />Abrir bitácora</button>
         </div>
-      </section>
+      </section>}
 
       <section className="panel p-5">
         <div className="mb-4 flex items-center gap-2">
@@ -239,7 +244,7 @@ function AdminSummary({ league, setTab, run, busy }) {
         </div>
         <div className="grid gap-3">
           {todayMatches.length === 0 && <p className="text-sm text-slate-400">No hay partidos programados hoy.</p>}
-          {todayMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={() => setTab('acta digital')} />)}
+          {todayMatches.map((match) => <AdminMatchCard key={match.id} match={match} league={league} onStart={can(permissions.MATCH_CAPTURE) ? () => setTab('acta digital') : null} />)}
         </div>
       </section>
     </div>
@@ -303,7 +308,7 @@ function AdminMatchCard({ match, league, onStart }) {
         <p className="text-lg font-black">{home?.name || 'Local'} vs {away?.name || 'Visitante'}</p>
         <p className="text-sm text-slate-400">{match.venue || 'Cancha por definir'} · {statusBadge(match.status)}</p>
       </div>
-      <button className="button min-h-12 w-full md:w-auto" onClick={onStart}>INICIAR</button>
+      {onStart && <button className="button min-h-12 w-full md:w-auto" onClick={onStart}>INICIAR</button>}
     </article>
   )
 }
@@ -316,6 +321,7 @@ function PartidosHub({ league, setTab }) {
     <section className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AdminAction title="Acta digital" text="Capturar partido en vivo" onClick={() => setTab('acta digital')} />
+        <AdminAction title="Revisar actas" text="Publicar oficial" onClick={() => setTab('revisión de actas')} />
         <AdminAction title="Crear partido" text="Calendario y resultados" onClick={() => setTab('partidos-form')} />
         <AdminAction title="Escáner NOVA ID" text="Validar jugadores" onClick={() => setTab('escáner nova id')} />
         <AdminAction title="Playoffs" text="Liguilla por división" onClick={() => setTab('playoffs')} />
@@ -329,6 +335,56 @@ function PartidosHub({ league, setTab }) {
           {visibleMatches.length === 0 && <p className="text-sm text-slate-400">Crea un partido para iniciar la captura.</p>}
         </div>
       </section>
+    </section>
+  )
+}
+
+function MatchReviewAdmin({ league, run, busy }) {
+  const reports = league.reports
+    .filter((report) => report.status === 'finalized' || report.status === 'official')
+    .map((report) => ({ report, match: league.matches.find((match) => match.id === report.match_id) }))
+    .filter((row) => row.match)
+    .sort((a, b) => new Date(b.match.match_date || 0) - new Date(a.match.match_date || 0))
+
+  return (
+    <section className="space-y-5">
+      <div className="rounded-lg border border-gold/30 bg-black p-5 shadow-gold">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Validación oficial</p>
+        <h2 className="mt-2 text-2xl font-black">Revisión de actas</h2>
+        <p className="mt-1 text-sm text-slate-400">Revisa el acta finalizada antes de publicar el resultado como oficial.</p>
+      </div>
+
+      <div className="grid gap-3">
+        {reports.length === 0 && <p className="panel p-5 text-sm text-slate-400">No hay actas finalizadas para revisar.</p>}
+        {reports.map(({ report, match }) => {
+          const official = match.status === 'official' || report.status === 'official'
+          const home = league.teamsById.get(match.home_team_id)
+          const away = league.teamsById.get(match.away_team_id)
+          const signaturesReady = report.home_captain_signature && report.away_captain_signature && report.referee_signature
+          return (
+            <article key={report.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-gold">{official ? 'Resultado oficial' : 'En revisión'}</p>
+                  <h3 className="mt-2 text-xl font-black">{home?.name || 'Local'} {match.home_score ?? 0} - {match.away_score ?? 0} {away?.name || 'Visitante'}</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {formatAdminDate(match.match_date)} · {match.venue || report.venue || 'Cancha sin registrar'} · Árbitro: {report.referee_name || 'Sin registrar'}
+                  </p>
+                  <p className={`mt-3 inline-flex rounded-lg border px-3 py-1 text-xs font-black ${signaturesReady ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100' : 'border-gold/30 bg-gold/10 text-gold'}`}>
+                    {signaturesReady ? 'Firmas completas' : 'Faltan firmas'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="button-secondary" onClick={() => window.open(`/match/${match.id}#acta`, '_blank', 'noopener,noreferrer')}>Ver acta</button>
+                  <button className="button" disabled={busy || official || !signaturesReady} onClick={() => run(() => approveOfficialMatch({ match, report }), 'Resultado publicado como oficial')}>
+                    {official ? 'Publicado' : 'Publicar oficial'}
+                  </button>
+                </div>
+              </div>
+            </article>
+          )
+        })}
+      </div>
     </section>
   )
 }
@@ -378,16 +434,22 @@ function SancionesHub({ league, setTab, run, busy }) {
 }
 
 function statusBadge(status) {
+  if (status === 'official') return '🟢 Oficial'
   if (status === 'played') return '🟢 Publicado'
   if (status === 'in_progress') return '🔵 En curso'
   if (status === 'problem') return '🔴 Problema'
   return '🟡 Pendiente'
 }
 
+function formatAdminDate(value) {
+  if (!value) return 'Fecha por definir'
+  return new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 function findCalendarConflicts(matches = []) {
   const slots = new Map()
   matches
-    .filter((match) => match.status !== 'played' && match.match_date && match.venue)
+    .filter((match) => !['played', 'official'].includes(match.status) && match.match_date && match.venue)
     .forEach((match) => {
       const slot = `${match.match_date.slice(0, 16)}-${match.venue.toLowerCase().trim()}`
       slots.set(slot, [...(slots.get(slot) || []), match])
@@ -717,7 +779,7 @@ function MatchForm({ run, busy, league }) {
     <Select label="Visitante" value={form.away_team_id} onChange={(away_team_id) => setForm({ ...form, away_team_id, mvp_player_id: '' })} options={divisionTeams} />
     <Field label="Goles local" value={form.home_score} onChange={(home_score) => setForm({ ...form, home_score })} />
     <Field label="Goles visitante" value={form.away_score} onChange={(away_score) => setForm({ ...form, away_score })} />
-    <Select label="Estado" value={form.status} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'scheduled', name: 'Programado' }, { id: 'played', name: 'Jugado' }]} />
+    <Select label="Estado" value={form.status} onChange={(status) => setForm({ ...form, status })} options={[{ id: 'scheduled', name: 'Programado' }, { id: 'in_progress', name: 'En vivo' }, { id: 'played', name: 'En revisión' }, { id: 'official', name: 'Resultado oficial' }, { id: 'problem', name: 'Problema' }]} />
     <Select label="MVP del partido" value={form.mvp_player_id || ''} onChange={(mvp_player_id) => setForm({ ...form, mvp_player_id })} options={matchPlayers} />
     <label className="block text-sm font-bold">Observaciones del partido</label>
     <textarea className="input min-h-28" value={form.observations || ''} onChange={(event) => setForm({ ...form, observations: event.target.value })} />
@@ -734,7 +796,7 @@ function validateMatch(match, league) {
   if (!home || !away) return 'Selecciona local y visitante'
   if (home.id === away.id) return 'Local y visitante deben ser equipos diferentes'
   if (home.division_id !== match.division_id || away.division_id !== match.division_id) return 'Los equipos deben pertenecer a la división seleccionada'
-  if (!match.id || match.status !== 'played') return ''
+  if (!match.id || !['played', 'official'].includes(match.status)) return ''
   const homeScore = match.home_score === '' ? null : Number(match.home_score)
   const awayScore = match.away_score === '' ? null : Number(match.away_score)
   if (homeScore == null || awayScore == null) return ''

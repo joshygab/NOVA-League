@@ -17,7 +17,7 @@ export function calculateStandings(teams = [], matches = []) {
   )
 
   matches
-    .filter((match) => match.status === 'played' && Number.isFinite(match.home_score) && Number.isFinite(match.away_score))
+    .filter((match) => isCountedMatch(match) && Number.isFinite(match.home_score) && Number.isFinite(match.away_score))
     .forEach((match) => {
       const home = table.get(match.home_team_id)
       const away = table.get(match.away_team_id)
@@ -148,7 +148,7 @@ export function buildPlayerStats(players = [], goals = [], events = [], cards = 
   })
 
   matches
-    .filter((match) => match.status === 'played')
+    .filter((match) => isCountedMatch(match))
     .forEach((match) => {
       if (match.mvp_player_id) {
         const mvp = stats.get(match.mvp_player_id)
@@ -176,7 +176,7 @@ export function buildPlayerStats(players = [], goals = [], events = [], cards = 
 export function buildMvpRanking(players = [], matches = []) {
   const ranking = new Map(players.map((player) => [player.id, { ...player, mvpAwards: 0, mvps: [] }]))
   matches
-    .filter((match) => match.status === 'played' && match.mvp_player_id)
+    .filter((match) => isCountedMatch(match) && match.mvp_player_id)
     .forEach((match) => {
       const player = ranking.get(match.mvp_player_id)
       if (!player) return
@@ -184,4 +184,8 @@ export function buildMvpRanking(players = [], matches = []) {
       player.mvps.push(match)
     })
   return [...ranking.values()].filter((player) => player.mvpAwards > 0).sort((a, b) => b.mvpAwards - a.mvpAwards || a.name.localeCompare(b.name))
+}
+
+export function isCountedMatch(match) {
+  return ['played', 'official'].includes(match?.status)
 }

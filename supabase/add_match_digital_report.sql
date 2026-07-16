@@ -30,7 +30,7 @@ create table if not exists public.match_reports (
   away_captain_signature text,
   referee_signature text,
   pdf_url text,
-  status text not null default 'draft' check (status in ('draft', 'finalized')),
+  status text not null default 'draft' check (status in ('draft', 'finalized', 'official', 'correction_requested')),
   created_at timestamptz not null default now(),
   unique (match_id)
 );

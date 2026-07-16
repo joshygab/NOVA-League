@@ -765,6 +765,38 @@ export async function finalizeDigitalMatch({ match, report, score }) {
   })
 }
 
+export async function approveOfficialMatch({ match, report }) {
+  if (!match?.id) return { error: { message: 'Selecciona un partido para publicar.' } }
+  const previousMatch = await readRecord('matches', match.id)
+  const previousReport = report?.id ? await readRecord('match_reports', report.id) : null
+  const matchResult = await supabase
+    .from('matches')
+    .update({ status: 'official' })
+    .eq('id', match.id)
+    .select()
+    .single()
+  if (matchResult.error) return matchResult
+
+  if (report?.id) {
+    const reportResult = await supabase
+      .from('match_reports')
+      .update({
+        status: 'official',
+        report_data: {
+          ...(report.report_data || {}),
+          officialized_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', report.id)
+      .select()
+      .single()
+    if (reportResult.error) return reportResult
+    await logAudit({ action: 'officialize_report', module: 'match_review', entityTable: 'match_reports', entityId: report.id, previousValue: previousReport, newValue: reportResult.data })
+  }
+
+  return auditResult(matchResult, { action: 'officialize_match', module: 'match_review', entityTable: 'matches', entityId: match.id, previousValue: previousMatch })
+}
+
 export async function confirmNovaIdAttendance({ match, player }) {
   if (!match || !player) return { error: { message: 'Selecciona partido y jugador.' } }
   if (![match.home_team_id, match.away_team_id].includes(player.team_id)) {

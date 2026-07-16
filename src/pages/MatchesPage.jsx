@@ -3,11 +3,12 @@ import DivisionTabs from '../components/DivisionTabs'
 import MatchCard from '../components/MatchCard'
 import PageTitle from '../components/PageTitle'
 import { useDivisionLeague } from '../lib/divisionFilters'
+import { isCountedMatch } from '../lib/standings'
 
 export default function MatchesPage({ league }) {
   const { divisions, selectedDivision, setDivision, filteredLeague } = useDivisionLeague(league)
-  const played = filteredLeague.matches.filter((match) => match.status === 'played')
-  const scheduled = filteredLeague.matches.filter((match) => match.status !== 'played')
+  const played = filteredLeague.matches.filter(isCountedMatch)
+  const scheduled = filteredLeague.matches.filter((match) => !isCountedMatch(match))
 
   return (
     <>

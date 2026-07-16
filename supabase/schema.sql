@@ -3,13 +3,13 @@ create extension if not exists "pgcrypto";
 create table public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
-  role text not null default 'player' check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin')),
+  role text not null default 'player' check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin', 'referee', 'venue_manager', 'discipline', 'treasury', 'media')),
   full_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create or replace function public.is_admin()
+create or replace function public.has_league_role(allowed_roles text[])
 returns boolean
 language sql
 stable
@@ -20,8 +20,28 @@ as $$
     select 1
     from public.user_profiles
     where id = auth.uid()
-      and role in ('admin', 'superadmin')
+      and role = any(allowed_roles)
   );
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.has_league_role(array['admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin']);
+$$;
+
+create or replace function public.can_capture_matches()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.has_league_role(array['admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin', 'referee']);
 $$;
 
 create or replace function public.handle_new_user()
@@ -240,7 +260,7 @@ create table public.matches (
   venue text,
   mvp_player_id uuid references public.players(id) on delete set null,
   observations text,
-  status text not null default 'scheduled' check (status in ('scheduled', 'played')),
+  status text not null default 'scheduled' check (status in ('scheduled', 'in_progress', 'played', 'official', 'problem')),
   created_at timestamptz not null default now()
 );
 
@@ -295,7 +315,7 @@ create table public.match_reports (
   away_captain_signature text,
   referee_signature text,
   pdf_url text,
-  status text not null default 'draft' check (status in ('draft', 'finalized')),
+  status text not null default 'draft' check (status in ('draft', 'finalized', 'official', 'correction_requested')),
   created_at timestamptz not null default now(),
   unique (match_id)
 );
@@ -648,6 +668,13 @@ create policy "admin write nova champions stats" on public.nova_champions_stats 
 create policy "admin write nova champions history" on public.nova_champions_champions_history for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write champion spotlight" on public.champion_spotlight for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin write champion history" on public.champion_history for all using (public.is_admin()) with check (public.is_admin());
+create policy "match officials write lineups" on public.match_lineups for all using (public.can_capture_matches()) with check (public.can_capture_matches());
+create policy "match officials write reports" on public.match_reports for all using (public.can_capture_matches()) with check (public.can_capture_matches());
+create policy "match officials write roster" on public.match_roster for all using (public.can_capture_matches()) with check (public.can_capture_matches());
+create policy "match officials write events" on public.match_events for all using (public.can_capture_matches()) with check (public.can_capture_matches());
+create policy "match officials write goals" on public.goals for all using (public.can_capture_matches()) with check (public.can_capture_matches());
+create policy "match officials write cards" on public.match_cards for all using (public.can_capture_matches()) with check (public.can_capture_matches());
+create policy "match officials update matches" on public.matches for update using (public.can_capture_matches()) with check (public.can_capture_matches());
 
 insert into storage.buckets (id, name, public)
 values

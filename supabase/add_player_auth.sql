@@ -1,16 +1,16 @@
 create table if not exists public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
-  role text not null default 'player' check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin')),
+  role text not null default 'player' check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin', 'referee', 'venue_manager', 'discipline', 'treasury', 'media')),
   full_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.user_profiles drop constraint if exists user_profiles_role_check;
-alter table public.user_profiles add constraint user_profiles_role_check check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin'));
+alter table public.user_profiles add constraint user_profiles_role_check check (role in ('viewer', 'player', 'captain', 'admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin', 'referee', 'venue_manager', 'discipline', 'treasury', 'media'));
 
-create or replace function public.is_admin()
+create or replace function public.has_league_role(allowed_roles text[])
 returns boolean
 language sql
 stable
@@ -21,8 +21,28 @@ as $$
     select 1
     from public.user_profiles
     where id = auth.uid()
-      and role in ('admin', 'superadmin')
+      and role = any(allowed_roles)
   );
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.has_league_role(array['admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin']);
+$$;
+
+create or replace function public.can_capture_matches()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.has_league_role(array['admin', 'superadmin', 'league_president', 'sports_coordinator', 'division_admin', 'referee']);
 $$;
 
 create or replace function public.handle_new_user()

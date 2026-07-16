@@ -3,13 +3,33 @@ import { uploadPublicFile } from './data'
 import { formatNovaId } from './novaId'
 
 export const roles = {
+  viewer: 'viewer',
   player: 'player',
   captain: 'captain',
   admin: 'admin',
   superadmin: 'superadmin',
+  leaguePresident: 'league_president',
+  sportsCoordinator: 'sports_coordinator',
+  divisionAdmin: 'division_admin',
+  referee: 'referee',
+  venueManager: 'venue_manager',
+  discipline: 'discipline',
+  treasury: 'treasury',
+  media: 'media',
 }
 
-export const adminRoles = [roles.admin, roles.superadmin]
+export const adminRoles = [
+  roles.admin,
+  roles.superadmin,
+  roles.leaguePresident,
+  roles.sportsCoordinator,
+  roles.divisionAdmin,
+  roles.referee,
+  roles.venueManager,
+  roles.discipline,
+  roles.treasury,
+  roles.media,
+]
 
 export async function getCurrentUserProfile() {
   if (!hasSupabaseConfig) return { user: null, profile: null, error: null }
