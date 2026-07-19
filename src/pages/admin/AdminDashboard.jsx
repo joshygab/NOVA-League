@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Activity, CalendarDays, Check, ClipboardList, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
+import { Activity, CalendarDays, Check, ClipboardList, Download, Home, LogOut, RefreshCcw, Save, Search, ShieldAlert, Trash2, UserRound, Users, X } from 'lucide-react'
 import { approveOfficialMatch, approvePlayer, assignPlayerToTeam, classifyNovaChampionsTeams, closeSeason, deleteRecord, fetchAuditLogs, generateNovaChampionsBracket, generateSemifinals, rejectPlayer, saveCard, saveChampionSpotlight, saveDivision, saveEvent, saveFinanceEntry, saveGoal, saveLeagueSettings, saveMatch, saveMatchAssignment, saveNews, saveNotification, saveNovaChampionsHistory, saveNovaChampionsMatch, saveNovaChampionsSettings, saveNovaChampionsStat, savePlayer, savePlayoffMatch, savePlayoffSetting, saveReferee, saveRosterMovement, saveSanction, saveTeam, saveTeamOfWeekSelection, saveVenue, setNovaChampionsTeam } from '../../lib/adminApi'
 import { hasSupabaseConfig } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
@@ -12,8 +12,8 @@ import { goalTypes, playoffStageLabel } from '../../lib/labels'
 import { buildQualityReport } from '../../lib/qualityChecks'
 import { clearOfflineQueue, readOfflineQueue, removeOfflineAction } from '../../lib/offlineQueue'
 import { syncOfflineQueue } from '../../lib/offlineSync'
-import MatchSheetAdmin from './MatchSheetAdmin'
 import NovaIdScannerAdmin from './NovaIdScannerAdmin'
+import { printRefereeMatchReport } from '../../lib/matchReportPdf'
 
 const emptyTeam = { name: '', division_id: '', city: '', founded: '', captain: '', coach: '', category: '', season: '', roster_limit: 18, home_colors: '', away_colors: '', social_url: '', inscription_status: 'active', crest_url: '', crestFile: null }
 const emptyDivision = { name: '', slug: '', description: '', active: true, level: '', promotion_slots: 0, relegation_slots: 0, championship_slots: 0 }
@@ -130,7 +130,6 @@ export default function AdminDashboard({ league }) {
         {tab === 'partidos-form' && <MatchForm busy={busy} run={run} league={league} />}
         {tab === 'revisión de actas' && <MatchReviewAdmin busy={busy} run={run} league={league} />}
         {tab === 'canchas y árbitros' && <VenuesRefereesAdmin busy={busy} run={run} league={league} />}
-        {tab === 'acta digital' && <MatchSheetAdmin busy={busy} run={run} league={league} />}
         {tab === 'escáner nova id' && <NovaIdScannerAdmin busy={busy} run={run} league={league} />}
         {tab === 'estadísticas de jugadores' && <GoalForm busy={busy} run={run} league={league} />}
         {tab === 'playoffs' && <PlayoffsAdmin busy={busy} run={run} league={league} />}
@@ -158,7 +157,7 @@ export default function AdminDashboard({ league }) {
 }
 
 function sectionForTool(tab) {
-  if (['partidos-form', 'revisión de actas', 'canchas y árbitros', 'acta digital', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
+  if (['partidos-form', 'revisión de actas', 'canchas y árbitros', 'playoffs', 'nova champions cup', 'eventos', 'tarjetas', 'estadísticas de jugadores', 'escáner nova id'].includes(tab)) return 'partidos'
   if (['equipos-form', 'liga', 'modo campeón', 'divisiones', 'tabla', 'noticias', 'nova media', 'finanzas', 'calidad'].includes(tab)) return 'equipos'
   if (['jugadores-form', 'aprobaciones', 'plantillas', 'equipo de la jornada'].includes(tab)) return 'jugadores'
   if (['sanciones-form'].includes(tab)) return 'sanciones'
@@ -173,7 +172,6 @@ function adminTitle(tab) {
     equipos: 'Equipos',
     jugadores: 'Jugadores',
     sanciones: 'Sanciones',
-    'acta digital': 'Captura de Partido',
     'revisión de actas': 'Revisión de Actas',
     'canchas y árbitros': 'Canchas y Árbitros',
     'escáner nova id': 'Escáner NOVA ID',
@@ -206,8 +204,6 @@ function AdminSummary({ league, setTab, run, busy, can, openRefereeMode }) {
     .sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
   const nextMatch = upcomingMatches[0]
   const incompleteMatches = league.matches.filter((match) => !match.match_date || !match.venue).length
-  const draftReports = league.reports.filter((report) => report.status !== 'finalized').length
-  const unsignedReports = league.reports.filter((report) => !report.home_captain_signature || !report.away_captain_signature || !report.referee_signature).length
   const calendarConflicts = findCalendarConflicts(league.matches).length
 
   return (
@@ -231,8 +227,7 @@ function AdminSummary({ league, setTab, run, busy, can, openRefereeMode }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {can(permissions.PLAYERS_MANAGE) && <AdminAttentionCard title="Jugadores por aprobar" value={pending} text="Revisa registros nuevos" tone={pending ? 'gold' : 'ok'} onClick={() => setTab('aprobaciones')} />}
             {can(permissions.DISCIPLINE_MANAGE) && <AdminAttentionCard title="Sanciones activas" value={sanctions} text="Disciplina pendiente" tone={sanctions ? 'danger' : 'ok'} onClick={() => setTab('sanciones')} />}
-            {can(permissions.MATCH_CAPTURE) && <AdminAttentionCard title="Actas sin cerrar" value={draftReports} text="Borradores guardados" tone={draftReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />}
-            {can(permissions.MATCH_CAPTURE) && <AdminAttentionCard title="Actas sin firma" value={unsignedReports} text="Faltan firmas digitales" tone={unsignedReports ? 'gold' : 'ok'} onClick={() => setTab('acta digital')} />}
+            {can(permissions.MATCH_REVIEW) && <AdminAttentionCard title="Actas por revisar" value={inReview} text="Enviadas desde modo Referee" tone={inReview ? 'gold' : 'ok'} onClick={() => setTab('revisión de actas')} />}
             {can(permissions.MATCH_REVIEW) && <AdminAttentionCard title="Partidos incompletos" value={incompleteMatches} text="Sin cancha o fecha" tone={incompleteMatches ? 'gold' : 'ok'} onClick={() => setTab('partidos-form')} />}
             {can(permissions.MATCH_REVIEW) && <AdminAttentionCard title="Choques de calendario" value={calendarConflicts} text="Misma cancha y hora" tone={calendarConflicts ? 'danger' : 'ok'} onClick={() => setTab('partidos')} />}
           </div>
@@ -253,7 +248,6 @@ function AdminSummary({ league, setTab, run, busy, can, openRefereeMode }) {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {can(permissions.MATCH_CAPTURE) && <AdminAction title="Iniciar partido" text="Captura rápida mejorada" onClick={() => openRefereeMode()} />}
-        {can(permissions.MATCH_CAPTURE) && <AdminAction title="Acta clásica" text="Captura administrativa" onClick={() => setTab('acta digital')} />}
         {can(permissions.MATCH_REVIEW) && <AdminAction title="Revisar actas" text="Publicar resultado oficial" onClick={() => setTab('revisión de actas')} />}
         {can(permissions.MATCH_REVIEW) && <AdminAction title="Crear partido" text="Programar jornada" onClick={() => setTab('partidos-form')} />}
         {can(permissions.PLAYERS_MANAGE) && <AdminAction title="Registrar jugador" text={`${pending} pendientes`} onClick={() => setTab('jugadores')} />}
@@ -362,7 +356,6 @@ function PartidosHub({ league, setTab, openRefereeMode }) {
     <section className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AdminAction title="Captura rápida" text="Modo Árbitro mejorado" onClick={() => openRefereeMode()} />
-        <AdminAction title="Acta clásica" text="Captura administrativa" onClick={() => setTab('acta digital')} />
         <AdminAction title="Revisar actas" text="Publicar oficial" onClick={() => setTab('revisión de actas')} />
         <AdminAction title="Crear partido" text="Calendario y resultados" onClick={() => setTab('partidos-form')} />
         <AdminAction title="Canchas y árbitros" text="Asignaciones" onClick={() => setTab('canchas y árbitros')} />
@@ -452,7 +445,7 @@ function findAssignmentConflicts(match, assignment, league) {
 
 function MatchReviewAdmin({ league, run, busy }) {
   const reports = league.reports
-    .filter((report) => report.status === 'finalized' || report.status === 'official')
+    .filter((report) => report.report_data?.referee_mode === true && (report.status === 'finalized' || report.status === 'official'))
     .map((report) => ({ report, match: league.matches.find((match) => match.id === report.match_id) }))
     .filter((row) => row.match)
     .sort((a, b) => new Date(b.match.match_date || 0) - new Date(a.match.match_date || 0))
@@ -487,6 +480,7 @@ function MatchReviewAdmin({ league, run, busy }) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button className="button-secondary" onClick={() => window.open(`/match/${match.id}#acta`, '_blank', 'noopener,noreferrer')}>Ver acta</button>
+                  <button className="button-secondary" onClick={() => printRefereeMatchReport({ league, match, report })}><Download size={16} />Generar PDF</button>
                   <button className="button" disabled={busy || official || !signaturesReady} onClick={() => run(() => approveOfficialMatch({ match, report }), 'Resultado publicado como oficial')}>
                     {official ? 'Publicado' : 'Publicar oficial'}
                   </button>

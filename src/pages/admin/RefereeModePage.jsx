@@ -115,6 +115,7 @@ export default function RefereeModePage({ league }) {
           <LiveRefereeMatch
             league={league}
             match={selectedMatch}
+            referee={referee}
             online={online}
             setMessage={setMessage}
             onBack={() => setStep('preparacion')}
@@ -345,7 +346,7 @@ function ManualRoster({ players, presentIds, league, match, onMark }) {
   )
 }
 
-function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
+function LiveRefereeMatch({ league, match, referee, online, setMessage, onBack }) {
   const [timer, setTimer] = useState(() => loadTimer(match))
   const [now, setNow] = useState(Date.now())
   const [action, setAction] = useState('')
@@ -519,7 +520,7 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
       match,
       score: liveScore,
       report: {
-        referee_name: 'Árbitro',
+        referee_name: referee?.full_name || 'Árbitro sin perfil enlazado',
         observations: finalForm.observations,
         mvp_player_id: finalForm.mvp_player_id || null,
         referee_signature: finalForm.referee_signature,
@@ -528,9 +529,19 @@ function LiveRefereeMatch({ league, match, online, setMessage, onBack }) {
         report_data: {
           timer,
           referee_mode: true,
+          source: 'referee_mode',
           mvp_player_id: finalForm.mvp_player_id || null,
           live_score: liveScore,
           event_count: allEvents.length,
+          events: allEvents.map((event) => ({
+            event_type: event.event_type || event.type,
+            minute: event.minute,
+            match_second: event.match_second,
+            team_id: event.team_id,
+            player_id: event.player_id,
+            related_player_id: event.related_player_id,
+            detail: event.detail || null,
+          })),
         },
       },
     })
